@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a1e">
+    <title>Running Trainer</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Tela Menu -->
+    <div id="menuScreen" class="screen active">
+        <div class="container">
+            <h1 class="title">Running Trainer</h1>
+            <p class="subtitle">Escolha o tipo de treino</p>
+            
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="showScreen('tempoScreen')">
+                    Treino por TEMPO
+                </button>
+                <button class="btn btn-secondary" onclick="showScreen('distanciaScreen')">
+                    Treino por DISTÂNCIA
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela Treino por Tempo -->
+    <div id="tempoScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <button class="btn-back" onclick="showScreen('menuScreen')">← Voltar</button>
+                <h2 class="screen-title">Treino por Tempo</h2>
+            </div>
+
+            <div class="form">
+                <div class="form-group">
+                    <label>Tempo de CORRIDA (minutos)</label>
+                    <input type="number" id="tempoCorrida" placeholder="Ex: 2" min="1">
+                </div>
+
+                <div class="form-group">
+                    <label>Tempo de CAMINHADA (minutos)</label>
+                    <input type="number" id="tempoCaminhada" placeholder="Ex: 1 (opcional)" min="0">
+                </div>
+
+                <div class="form-group">
+                    <label>Número de REPETIÇÕES</label>
+                    <input type="number" id="repeticoes" placeholder="Ex: 10" min="1">
+                </div>
+
+                <button class="btn btn-success" onclick="iniciarTreinoTempo()">
+                    INICIAR TREINO
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela Treino por Distância -->
+    <div id="distanciaScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <button class="btn-back" onclick="showScreen('menuScreen')">← Voltar</button>
+                <h2 class="screen-title">Treino por Distância</h2>
+            </div>
+
+            <div class="form">
+                <div class="form-group">
+                    <label>Distância de CORRIDA (km)</label>
+                    <input type="number" id="distCorrida" placeholder="Ex: 0.2 (200m) ou 2" step="0.1" min="0.1">
+                </div>
+
+                <div class="form-group">
+                    <label>Distância de CAMINHADA (km)</label>
+                    <input type="number" id="distCaminhada" placeholder="Ex: 0.1 (opcional)" step="0.1" min="0">
+                </div>
+
+                <div class="form-group">
+                    <label>Número de REPETIÇÕES</label>
+                    <input type="number" id="repeticoesDist" placeholder="Ex: 10" min="1">
+                </div>
+
+                <p class="info-text">📍 GPS será ativado durante o treino</p>
+
+                <button class="btn btn-success" onclick="iniciarTreinoDistancia()">
+                    INICIAR TREINO
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela de Treino -->
+    <div id="treinoScreen" class="screen">
+        <div class="container treino-container">
+            <div class="fase-atual" id="faseAtual">Preparar</div>
+
+            <div class="info-principal">
+                <div class="info-box">
+                    <div class="info-label" id="infoLabel">Tempo Restante</div>
+                    <div class="info-valor" id="infoValor">00:00</div>
+                </div>
+
+                <div class="info-box">
+                    <div class="info-label">Repetições</div>
+                    <div class="info-valor-small" id="repeticoesDisplay">0 / 0</div>
+                </div>
+            </div>
+
+            <div class="indicador-fase" id="indicadorFase"></div>
+
+            <div class="controles">
+                <button class="btn btn-warning" id="btnPausar" onclick="pausarTreino()">
+                    PAUSAR
+                </button>
+                <button class="btn btn-danger" onclick="finalizarTreino()">
+                    FINALIZAR
+                </button>
+            </div>
+
+            <div class="info-extra" id="infoExtra"></div>
+        </div>
+    </div>
+
+    <!-- Modal de Permissões -->
+    <div id="permissionModal" class="modal">
+        <div class="modal-content">
+            <h3>Permissões Necessárias</h3>
+            <p>Para funcionar corretamente, o app precisa acessar:</p>
+            <ul>
+                <li>🔊 Áudio (para alertas sonoros)</li>
+                <li>📳 Vibração</li>
+                <li>🔔 Notificações (aparecem no seu relógio)</li>
+                <li>📍 Localização (apenas para treino por distância)</li>
+            </ul>
+            <button class="btn btn-primary" onclick="requestPermissions()">
+                PERMITIR
+            </button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
