@@ -45,6 +45,9 @@ function requestPermissions() {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
     
+    // Solicitar permissão para notificações
+    solicitarPermissaoNotificacoes();
+    
     permissoesOk = true;
     document.getElementById('permissionModal').classList.remove('active');
     
@@ -52,6 +55,9 @@ function requestPermissions() {
     if ('vibrate' in navigator) {
         navigator.vibrate(200);
     }
+    
+    // Testar notificação
+    enviarNotificacao('Running Trainer', 'Notificações ativadas! Seu smartwatch vibrará nos alertas.');
 }
 
 // ========================================
@@ -96,27 +102,35 @@ function vibrar(duracao = 200) {
     }
 }
 
-// Função para enviar notificação (aparece no relógio)
-function enviarNotificacao(titulo, corpo) {
-    if ('Notification' in window && Notification.permission === 'granted') {
-        const notification = new Notification(titulo, {
-            body: corpo,
+// Enviar notificação (faz smartwatch vibrar!)
+function enviarNotificacao(titulo, mensagem, icone = '🏃') {
+    if (!('Notification' in window)) return;
+    
+    if (Notification.permission === 'granted') {
+        new Notification(titulo, {
+            body: mensagem,
             icon: 'icon-192.png',
             badge: 'icon-72.png',
             vibrate: [200, 100, 200],
+            tag: 'running-trainer',
             requireInteraction: false
         });
-        
-        // Fechar notificação após 3 segundos
-        setTimeout(() => notification.close(), 3000);
     }
 }
 
 // Solicitar permissão para notificações
-function solicitarPermissaoNotificacoes() {
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
+async function solicitarPermissaoNotificacoes() {
+    if (!('Notification' in window)) {
+        console.log('Notificações não suportadas');
+        return false;
     }
+    
+    if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        return permission === 'granted';
+    }
+    
+    return Notification.permission === 'granted';
 }
 
 // ========================================
@@ -187,6 +201,7 @@ function iniciarContagemRegressiva() {
     
     tocarBeep();
     vibrar(200);
+    enviarNotificacao('Preparar', `Iniciando em ${contador}...`, '⏱️');
     
     const intervalo = setInterval(() => {
         contador--;
@@ -195,10 +210,12 @@ function iniciarContagemRegressiva() {
             document.getElementById('faseAtual').textContent = contador;
             tocarBeep();
             vibrar(200);
+            enviarNotificacao('Preparar', `${contador}...`, '⏱️');
         } else if (contador === 0) {
             document.getElementById('faseAtual').textContent = 'VAI!';
             tocarBeep(1000, 0.5);
             vibrar(500);
+            enviarNotificacao('VAI!', 'Treino iniciado!', '🏃');
         } else {
             clearInterval(intervalo);
             iniciarTreinoReal();
@@ -268,6 +285,7 @@ function trocarFase() {
             tempoRestante = config.tempoCaminhada;
             tocarTroca();
             vibrar(300);
+            enviarNotificacao('Caminhada', 'Agora caminhe!', '🚶');
             atualizarDisplay();
         } else {
             proximaRepeticao();
@@ -290,6 +308,7 @@ function proximaRepeticao() {
         
         tocarTroca();
         vibrar(300);
+        enviarNotificacao('Corrida', `Repetição ${repeticaoAtual} de ${repeticaoTotal}`, '🏃');
         atualizarDisplay();
     } else {
         finalizarComSucesso();
@@ -395,6 +414,9 @@ function finalizarComSucesso() {
     setTimeout(() => { tocarFinal(); vibrar(400); }, 0);
     setTimeout(() => { tocarFinal(); vibrar(400); }, 500);
     setTimeout(() => { tocarFinal(); vibrar(400); }, 1000);
+    
+    // Notificação de conclusão
+    enviarNotificacao('🎉 Parabéns!', 'Você concluiu o treino com sucesso!', '🏆');
     
     setTimeout(() => showScreen('menuScreen'), 5000);
 }
