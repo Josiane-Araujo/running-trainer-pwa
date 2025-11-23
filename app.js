@@ -26,6 +26,13 @@ let ultimaLocalizacao = null;
 let audioContext = null;
 let permissoesOk = false;
 
+// Wake Lock para manter tela ligada
+let wakeLock = null;
+
+// Audio silencioso para manter app ativo em background
+let audioSilencioso = null;
+let audioSilenciosoSource = null;
+
 // ========================================
 // FUNÇÕES DE NAVEGAÇÃO
 // ========================================
@@ -48,6 +55,12 @@ function requestPermissions() {
     // Solicitar permissão para notificações
     solicitarPermissaoNotificacoes();
     
+    // Solicitar Wake Lock
+    solicitarWakeLock();
+    
+    // Iniciar áudio silencioso para manter app ativo
+    iniciarAudioSilencioso();
+    
     permissoesOk = true;
     document.getElementById('permissionModal').classList.remove('active');
     
@@ -57,7 +70,7 @@ function requestPermissions() {
     }
     
     // Testar notificação
-    enviarNotificacao('Running Trainer', 'Notificações ativadas! Seu smartwatch vibrará nos alertas.');
+    enviarNotificacao('Running Trainer', 'App configurado! Agora funciona com tela bloqueada.');
 }
 
 // ========================================
@@ -131,6 +144,82 @@ async function solicitarPermissaoNotificacoes() {
     }
     
     return Notification.permission === 'granted';
+}
+
+// ========================================
+// WAKE LOCK - Mantém tela ligada
+// ========================================
+
+async function solicitarWakeLock() {
+    if (!('wakeLock' in navigator)) {
+        console.log('Wake Lock não suportado');
+        return;
+    }
+    
+    try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log('✓ Wake Lock ativado - tela não desligará');
+        
+        // Reativar se a tela for bloqueada e desbloqueada
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                wakeLock = await navigator.wakeLock.request('screen');
+            }
+        });
+    } catch (err) {
+        console.log('Wake Lock não disponível:', err);
+    }
+}
+
+function liberarWakeLock() {
+    if (wakeLock !== null) {
+        wakeLock.release().then(() => {
+            wakeLock = null;
+            console.log('✓ Wake Lock liberado');
+        });
+    }
+}
+
+// ========================================
+// ÁUDIO SILENCIOSO - Mantém app ativo em background
+// ========================================
+
+function iniciarAudioSilencioso() {
+    if (!audioContext) return;
+    
+    try {
+        // Criar oscilador silencioso (volume muito baixo)
+        audioSilenciosoSource = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        audioSilenciosoSource.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Volume muito baixo (quase inaudível)
+        gainNode.gain.value = 0.001;
+        
+        // Frequência baixa
+        audioSilenciosoSource.frequency.value = 20;
+        
+        // Iniciar
+        audioSilenciosoSource.start();
+        
+        console.log('✓ Áudio silencioso ativado - app continuará ativo em background');
+    } catch (err) {
+        console.log('Erro ao iniciar áudio silencioso:', err);
+    }
+}
+
+function pararAudioSilencioso() {
+    if (audioSilenciosoSource) {
+        try {
+            audioSilenciosoSource.stop();
+            audioSilenciosoSource = null;
+            console.log('✓ Áudio silencioso parado');
+        } catch (err) {
+            console.log('Erro ao parar áudio silencioso:', err);
+        }
+    }
 }
 
 // ========================================
@@ -232,6 +321,12 @@ function iniciarTreinoReal() {
     repeticaoAtual = 1;
     repeticaoTotal = config.repeticoes;
     fase = 'corrida';
+    
+    // Ativar Wake Lock e áudio para manter ativo
+    solicitarWakeLock();
+    if (!audioSilenciosoSource) {
+        iniciarAudioSilencioso();
+    }
     
     atualizarDisplay();
     
@@ -434,6 +529,12 @@ function limparTreino() {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
     }
+    
+    // Liberar Wake Lock
+    liberarWakeLock();
+    
+    // Parar áudio silencioso
+    pararAudioSilencioso();
     
     ultimaLocalizacao = null;
     distanciaPercorrida = 0;
