@@ -46,6 +46,44 @@ function showScreen(screenId) {
     document.getElementById(screenId).classList.add('active');
 }
 
+// Função para testar voz manualmente
+function testarVozManual() {
+    console.log('🎤 Teste manual de voz iniciado');
+    
+    // Garantir que vozes estão carregadas
+    if (vozesDisponiveis.length === 0) {
+        vozesDisponiveis = speechSynthesis.getVoices();
+    }
+    
+    // Testar sequência
+    falarTexto('3', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
+        setTimeout(() => {
+            falarTexto('2', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
+                setTimeout(() => {
+                    falarTexto('1', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
+                        setTimeout(() => {
+                            falarTexto('VAI!', { volume: 1.0, rate: 1.0, pitch: 1.2, onEnd: () => {
+                                setTimeout(() => {
+                                    falarComBeep('CORRIDA!', 800);
+                                    setTimeout(() => {
+                                        falarComBeep('CAMINHADA!', 600);
+                                        setTimeout(() => {
+                                            falarTexto('PARABÉNS! Voz funcionando!', { volume: 1.0, rate: 0.9, pitch: 1.1 });
+                                        }, 2000);
+                                    }, 2000);
+                                }, 1000);
+                            }});
+                        }, 1000);
+                    }});
+                }, 1000);
+            }});
+        }, 1000);
+    }});
+    
+    // Vibrar para feedback
+    vibrar(200);
+}
+
 // ========================================
 // PERMISSÕES
 // ========================================
@@ -58,6 +96,9 @@ function requestPermissions() {
     
     // Carregar vozes para síntese de fala
     carregarVozes();
+    
+    // IMPORTANTE: Ativar voz com interação do usuário (iOS exige isso)
+    ativarVozComInteracao();
     
     // Solicitar permissão para notificações
     solicitarPermissaoNotificacoes();
@@ -75,11 +116,43 @@ function requestPermissions() {
     if ('vibrate' in navigator) {
         navigator.vibrate(200);
     }
+}
+
+// Função para ativar voz com interação do usuário
+function ativarVozComInteracao() {
+    console.log('🎤 Ativando voz com interação do usuário...');
     
-    // Testar voz
-    setTimeout(() => {
-        falarTexto('Running Trainer configurado! Pronto para treinar!');
-    }, 500);
+    // Carregar vozes se ainda não carregou
+    if (vozesDisponiveis.length === 0) {
+        vozesDisponiveis = speechSynthesis.getVoices();
+    }
+    
+    // Tentar falar algo muito curto para "desbloquear" a voz no iOS
+    try {
+        const utterance = new SpeechSynthesisUtterance('.');
+        utterance.volume = 0.01; // Quase mudo
+        utterance.rate = 2.0; // Muito rápido
+        
+        utterance.onend = () => {
+            console.log('✓ Voz ativada com sucesso!');
+            // Agora falar a mensagem real
+            setTimeout(() => {
+                falarTexto('Running Trainer configurado! Pronto para treinar!');
+            }, 500);
+        };
+        
+        utterance.onerror = (error) => {
+            console.error('❌ Erro ao ativar voz:', error);
+            // Tentar novamente de forma mais direta
+            setTimeout(() => {
+                falarTexto('Pronto!');
+            }, 1000);
+        };
+        
+        speechSynthesis.speak(utterance);
+    } catch (error) {
+        console.error('❌ Exceção ao ativar voz:', error);
+    }
 }
 
 // ========================================
@@ -163,16 +236,35 @@ function carregarVozes() {
     // Carregar vozes disponíveis
     vozesDisponiveis = speechSynthesis.getVoices();
     
+    console.log(`📢 Total de vozes disponíveis: ${vozesDisponiveis.length}`);
+    
+    if (vozesDisponiveis.length === 0) {
+        console.log('⚠️ Nenhuma voz carregada ainda, tentando novamente...');
+        return;
+    }
+    
+    // Mostrar todas as vozes no console para debug
+    vozesDisponiveis.forEach((voice, index) => {
+        console.log(`${index}: ${voice.name} (${voice.lang})`);
+    });
+    
     // Tentar encontrar voz do Google em português do Brasil
     vozSelecionada = vozesDisponiveis.find(voice => 
-        voice.name.includes('Google') && voice.lang === 'pt-BR'
+        voice.name.toLowerCase().includes('google') && voice.lang === 'pt-BR'
     );
+    
+    if (vozSelecionada) {
+        console.log('✓ Voz Google pt-BR encontrada:', vozSelecionada.name);
+    }
     
     // Se não encontrar Google, procurar qualquer voz pt-BR
     if (!vozSelecionada) {
         vozSelecionada = vozesDisponiveis.find(voice => 
             voice.lang === 'pt-BR'
         );
+        if (vozSelecionada) {
+            console.log('✓ Voz pt-BR encontrada:', vozSelecionada.name);
+        }
     }
     
     // Se ainda não encontrar, usar qualquer voz em português
@@ -180,55 +272,116 @@ function carregarVozes() {
         vozSelecionada = vozesDisponiveis.find(voice => 
             voice.lang.startsWith('pt')
         );
+        if (vozSelecionada) {
+            console.log('✓ Voz PT encontrada:', vozSelecionada.name);
+        }
     }
     
     // Fallback para primeira voz disponível
     if (!vozSelecionada && vozesDisponiveis.length > 0) {
         vozSelecionada = vozesDisponiveis[0];
+        console.log('⚠️ Usando voz padrão:', vozSelecionada.name);
     }
     
-    console.log('✓ Voz selecionada:', vozSelecionada ? vozSelecionada.name : 'Nenhuma');
+    if (!vozSelecionada) {
+        console.error('❌ ERRO: Nenhuma voz disponível!');
+    } else {
+        console.log('✓ Voz selecionada:', vozSelecionada.name, vozSelecionada.lang);
+    }
 }
 
 // Garantir que vozes sejam carregadas
 if (typeof speechSynthesis !== 'undefined') {
-    speechSynthesis.onvoiceschanged = carregarVozes;
+    speechSynthesis.onvoiceschanged = () => {
+        console.log('🔄 Evento onvoiceschanged disparado');
+        carregarVozes();
+    };
+    
+    // Tentar carregar imediatamente também
+    carregarVozes();
 }
 
 function falarTexto(texto, opcoes = {}) {
+    console.log('🗣️ Tentando falar:', texto);
+    
     if (typeof speechSynthesis === 'undefined') {
-        console.log('Síntese de fala não suportada');
+        console.error('❌ speechSynthesis não está disponível');
         return;
+    }
+    
+    // Recarregar vozes se necessário
+    if (vozesDisponiveis.length === 0) {
+        console.log('⚠️ Recarregando vozes...');
+        vozesDisponiveis = speechSynthesis.getVoices();
+    }
+    
+    // Selecionar voz se ainda não selecionou
+    if (!vozSelecionada && vozesDisponiveis.length > 0) {
+        console.log('⚠️ Selecionando voz automaticamente...');
+        
+        // Tentar encontrar voz pt-BR
+        vozSelecionada = vozesDisponiveis.find(v => v.lang === 'pt-BR') || 
+                        vozesDisponiveis.find(v => v.lang.startsWith('pt')) ||
+                        vozesDisponiveis[0];
+        
+        if (vozSelecionada) {
+            console.log('✓ Voz selecionada:', vozSelecionada.name);
+        }
     }
     
     // Cancelar fala anterior
     speechSynthesis.cancel();
     
-    // Criar utterance
-    const utterance = new SpeechSynthesisUtterance(texto);
-    
-    // Configurações
-    utterance.voice = vozSelecionada;
-    utterance.lang = 'pt-BR';
-    utterance.volume = opcoes.volume || 1.0;
-    utterance.rate = opcoes.rate || 0.95; // Levemente mais devagar para clareza
-    utterance.pitch = opcoes.pitch || 1.1; // Levemente mais agudo para penetrar ruído
-    
-    // Callback quando terminar
-    if (opcoes.onEnd) {
-        utterance.onend = opcoes.onEnd;
-    }
-    
-    // Falar
-    try {
-        speechSynthesis.speak(utterance);
-        console.log('🗣️ Falando:', texto);
-    } catch (error) {
-        console.error('Erro ao falar:', error);
-    }
+    // Pequeno delay para garantir que cancelou
+    setTimeout(() => {
+        // Criar utterance
+        const utterance = new SpeechSynthesisUtterance(texto);
+        
+        // Configurações
+        if (vozSelecionada) {
+            utterance.voice = vozSelecionada;
+        }
+        utterance.lang = 'pt-BR';
+        utterance.volume = opcoes.volume !== undefined ? opcoes.volume : 1.0;
+        utterance.rate = opcoes.rate !== undefined ? opcoes.rate : 0.95;
+        utterance.pitch = opcoes.pitch !== undefined ? opcoes.pitch : 1.1;
+        
+        // Debug
+        utterance.onstart = () => {
+            console.log('✓ Voz iniciada:', texto);
+        };
+        
+        utterance.onerror = (event) => {
+            console.error('❌ Erro na voz:', event.error);
+            
+            // Se der erro, tentar novamente sem voz específica
+            if (vozSelecionada) {
+                console.log('⚠️ Tentando sem voz específica...');
+                vozSelecionada = null;
+                setTimeout(() => falarTexto(texto, opcoes), 500);
+            }
+        };
+        
+        utterance.onend = () => {
+            console.log('✓ Voz finalizada:', texto);
+            if (opcoes.onEnd) {
+                opcoes.onEnd();
+            }
+        };
+        
+        // Falar
+        try {
+            speechSynthesis.speak(utterance);
+            console.log('✓ speechSynthesis.speak() chamado');
+        } catch (error) {
+            console.error('❌ Erro ao chamar speak():', error);
+        }
+    }, 100);
 }
 
 function falarComBeep(texto, frequenciaBeep = 1000) {
+    console.log('🔊 Falar com beep:', texto);
+    
     // Tocar beep primeiro
     tocarBeep(frequenciaBeep, 0.3);
     
@@ -660,6 +813,12 @@ if ('serviceWorker' in navigator) {
 
 window.addEventListener('load', () => {
     console.log('🏃 Running Trainer PWA Iniciado');
+    
+    // Carregar vozes imediatamente
+    carregarVozes();
+    
+    // Recarregar vozes após 1 segundo (garantia)
+    setTimeout(carregarVozes, 1000);
     
     // Prevenir zoom
     document.addEventListener('gesturestart', e => e.preventDefault());
