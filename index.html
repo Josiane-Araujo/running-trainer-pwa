@@ -128,16 +128,18 @@
     <!-- Modal de Permissões -->
     <div id="permissionModal" class="modal">
         <div class="modal-content">
-            <h3>Permissões Necessárias</h3>
-            <p>Para funcionar corretamente, o app precisa acessar:</p>
+            <h3>⚡ Configuração Importante</h3>
+            <p>Para o app funcionar com a tela bloqueada, você precisa:</p>
             <ul>
-                <li>🔊 Áudio (para alertas sonoros)</li>
-                <li>📳 Vibração</li>
-                <li>🔔 Notificações (para vibrar no smartwatch)</li>
-                <li>📍 Localização (apenas para treino por distância)</li>
+                <li>🔊 <strong>Áudio</strong> - Sons de alerta</li>
+                <li>📳 <strong>Vibração</strong> - Alertas táteis</li>
+                <li>🔔 <strong>Notificações</strong> - Alertas na tela bloqueada</li>
+                <li>🔒 <strong>Tela Ligada</strong> - Mantém app ativo</li>
+                <li>📍 <strong>Localização</strong> - Para treino por distância</li>
             </ul>
+            <p class="warning-text">⚠️ <strong>IMPORTANTE:</strong> Durante o treino, mantenha o app aberto (pode bloquear a tela). Não feche o app nem abra outros aplicativos.</p>
             <button class="btn btn-primary" onclick="requestPermissions()">
-                PERMITIR
+                PERMITIR E CONFIGURAR
             </button>
         </div>
     </div>
