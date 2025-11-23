@@ -315,6 +315,16 @@ body {
     color: #e0e0e0;
 }
 
+.warning-text {
+    background: rgba(255, 153, 0, 0.2);
+    border-left: 4px solid #ff9900;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 5px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
 /* Responsividade */
 @media (max-width: 480px) {
     .title {
