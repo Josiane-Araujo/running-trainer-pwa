@@ -55,7 +55,10 @@ function testarVozManual() {
         vozesDisponiveis = speechSynthesis.getVoices();
     }
     
-    // Testar sequência
+    // Vibrar para feedback
+    vibrar(200);
+    
+    // Testar sequência SEM BEEPS (só voz)
     falarTexto('3', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
         setTimeout(() => {
             falarTexto('2', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
@@ -64,14 +67,16 @@ function testarVozManual() {
                         setTimeout(() => {
                             falarTexto('VAI!', { volume: 1.0, rate: 1.0, pitch: 1.2, onEnd: () => {
                                 setTimeout(() => {
-                                    falarComBeep('CORRIDA!', 800);
-                                    setTimeout(() => {
-                                        falarComBeep('CAMINHADA!', 600);
+                                    falarTexto('CORRIDA!', { volume: 1.0, rate: 0.95, pitch: 1.1, onEnd: () => {
                                         setTimeout(() => {
-                                            falarTexto('PARABÉNS! Voz funcionando!', { volume: 1.0, rate: 0.9, pitch: 1.1 });
-                                        }, 2000);
-                                    }, 2000);
-                                }, 1000);
+                                            falarTexto('CAMINHADA!', { volume: 1.0, rate: 0.95, pitch: 1.1, onEnd: () => {
+                                                setTimeout(() => {
+                                                    falarTexto('PARABÉNS! Voz funcionando perfeitamente!', { volume: 1.0, rate: 0.9, pitch: 1.1 });
+                                                }, 1500);
+                                            }});
+                                        }, 1500);
+                                    }});
+                                }, 800);
                             }});
                         }, 1000);
                     }});
@@ -79,9 +84,6 @@ function testarVozManual() {
             }});
         }, 1000);
     }});
-    
-    // Vibrar para feedback
-    vibrar(200);
 }
 
 // ========================================
@@ -243,50 +245,54 @@ function carregarVozes() {
         return;
     }
     
-    // Mostrar todas as vozes no console para debug
-    vozesDisponiveis.forEach((voice, index) => {
-        console.log(`${index}: ${voice.name} (${voice.lang})`);
-    });
+    // IMPORTANTE: Selecionar APENAS UMA voz
+    // Prioridade: 1) Google pt-BR, 2) Qualquer pt-BR, 3) Qualquer pt, 4) Padrão
     
-    // Tentar encontrar voz do Google em português do Brasil
+    // Tentar Google pt-BR
     vozSelecionada = vozesDisponiveis.find(voice => 
-        voice.name.toLowerCase().includes('google') && voice.lang === 'pt-BR'
+        voice.lang === 'pt-BR' && voice.name.toLowerCase().includes('google')
     );
     
     if (vozSelecionada) {
-        console.log('✓ Voz Google pt-BR encontrada:', vozSelecionada.name);
+        console.log('✓ Voz Google pt-BR selecionada:', vozSelecionada.name);
+        return; // PARAR AQUI - já achou a melhor
     }
     
-    // Se não encontrar Google, procurar qualquer voz pt-BR
-    if (!vozSelecionada) {
-        vozSelecionada = vozesDisponiveis.find(voice => 
-            voice.lang === 'pt-BR'
-        );
-        if (vozSelecionada) {
-            console.log('✓ Voz pt-BR encontrada:', vozSelecionada.name);
-        }
+    // Se não encontrou Google, procurar qualquer pt-BR FEMININA
+    vozSelecionada = vozesDisponiveis.find(voice => 
+        voice.lang === 'pt-BR' && 
+        (voice.name.toLowerCase().includes('luciana') || 
+         voice.name.toLowerCase().includes('female') ||
+         voice.name.toLowerCase().includes('feminina'))
+    );
+    
+    if (vozSelecionada) {
+        console.log('✓ Voz pt-BR feminina selecionada:', vozSelecionada.name);
+        return;
     }
     
-    // Se ainda não encontrar, usar qualquer voz em português
-    if (!vozSelecionada) {
-        vozSelecionada = vozesDisponiveis.find(voice => 
-            voice.lang.startsWith('pt')
-        );
-        if (vozSelecionada) {
-            console.log('✓ Voz PT encontrada:', vozSelecionada.name);
-        }
+    // Se não achou feminina, pegar PRIMEIRA pt-BR
+    vozSelecionada = vozesDisponiveis.find(voice => voice.lang === 'pt-BR');
+    
+    if (vozSelecionada) {
+        console.log('✓ Voz pt-BR selecionada:', vozSelecionada.name);
+        return;
     }
     
-    // Fallback para primeira voz disponível
-    if (!vozSelecionada && vozesDisponiveis.length > 0) {
+    // Se ainda não encontrou, qualquer português
+    vozSelecionada = vozesDisponiveis.find(voice => voice.lang.startsWith('pt'));
+    
+    if (vozSelecionada) {
+        console.log('✓ Voz PT selecionada:', vozSelecionada.name);
+        return;
+    }
+    
+    // Último recurso: primeira voz disponível
+    if (vozesDisponiveis.length > 0) {
         vozSelecionada = vozesDisponiveis[0];
         console.log('⚠️ Usando voz padrão:', vozSelecionada.name);
-    }
-    
-    if (!vozSelecionada) {
-        console.error('❌ ERRO: Nenhuma voz disponível!');
     } else {
-        console.log('✓ Voz selecionada:', vozSelecionada.name, vozSelecionada.lang);
+        console.error('❌ ERRO: Nenhuma voz disponível!');
     }
 }
 
@@ -309,6 +315,12 @@ function falarTexto(texto, opcoes = {}) {
         return;
     }
     
+    // CANCELAR QUALQUER FALA ANTERIOR - MUITO IMPORTANTE!
+    if (speechSynthesis.speaking) {
+        console.log('⚠️ Cancelando fala anterior...');
+        speechSynthesis.cancel();
+    }
+    
     // Recarregar vozes se necessário
     if (vozesDisponiveis.length === 0) {
         console.log('⚠️ Recarregando vozes...');
@@ -318,29 +330,20 @@ function falarTexto(texto, opcoes = {}) {
     // Selecionar voz se ainda não selecionou
     if (!vozSelecionada && vozesDisponiveis.length > 0) {
         console.log('⚠️ Selecionando voz automaticamente...');
-        
-        // Tentar encontrar voz pt-BR
-        vozSelecionada = vozesDisponiveis.find(v => v.lang === 'pt-BR') || 
-                        vozesDisponiveis.find(v => v.lang.startsWith('pt')) ||
-                        vozesDisponiveis[0];
-        
-        if (vozSelecionada) {
-            console.log('✓ Voz selecionada:', vozSelecionada.name);
-        }
+        carregarVozes();
     }
     
-    // Cancelar fala anterior
-    speechSynthesis.cancel();
-    
-    // Pequeno delay para garantir que cancelou
+    // Aguardar cancelamento completo antes de falar
     setTimeout(() => {
         // Criar utterance
         const utterance = new SpeechSynthesisUtterance(texto);
         
-        // Configurações
+        // Configurações - SEMPRE usar a MESMA voz
         if (vozSelecionada) {
             utterance.voice = vozSelecionada;
+            console.log('🎤 Usando voz:', vozSelecionada.name);
         }
+        
         utterance.lang = 'pt-BR';
         utterance.volume = opcoes.volume !== undefined ? opcoes.volume : 1.0;
         utterance.rate = opcoes.rate !== undefined ? opcoes.rate : 0.95;
@@ -353,13 +356,6 @@ function falarTexto(texto, opcoes = {}) {
         
         utterance.onerror = (event) => {
             console.error('❌ Erro na voz:', event.error);
-            
-            // Se der erro, tentar novamente sem voz específica
-            if (vozSelecionada) {
-                console.log('⚠️ Tentando sem voz específica...');
-                vozSelecionada = null;
-                setTimeout(() => falarTexto(texto, opcoes), 500);
-            }
         };
         
         utterance.onend = () => {
@@ -376,7 +372,7 @@ function falarTexto(texto, opcoes = {}) {
         } catch (error) {
             console.error('❌ Erro ao chamar speak():', error);
         }
-    }, 100);
+    }, 150); // Delay para garantir que cancelou
 }
 
 function falarComBeep(texto, frequenciaBeep = 1000) {
@@ -385,10 +381,10 @@ function falarComBeep(texto, frequenciaBeep = 1000) {
     // Tocar beep primeiro
     tocarBeep(frequenciaBeep, 0.3);
     
-    // Falar após pequeno delay
+    // Falar após o beep terminar (não simultâneo)
     setTimeout(() => {
         falarTexto(texto);
-    }, 350);
+    }, 400);
 }
 
 async function solicitarWakeLock() {
@@ -529,10 +525,10 @@ function iniciarContagemRegressiva() {
     document.getElementById('infoValor').textContent = '';
     document.getElementById('repeticoesDisplay').textContent = '';
     
+    // Primeiro beep e voz
     tocarBeep();
     vibrar(200);
     falarTexto(contador.toString());
-    enviarNotificacao('Preparar', `Iniciando em ${contador}...`, '⏱️');
     
     const intervalo = setInterval(() => {
         contador--;
@@ -542,13 +538,11 @@ function iniciarContagemRegressiva() {
             tocarBeep();
             vibrar(200);
             falarTexto(contador.toString());
-            enviarNotificacao('Preparar', `${contador}...`, '⏱️');
         } else if (contador === 0) {
             document.getElementById('faseAtual').textContent = 'VAI!';
             tocarBeep(1000, 0.5);
             vibrar(500);
             falarTexto('VAI!', { pitch: 1.3, rate: 1.0 });
-            enviarNotificacao('VAI!', 'Treino iniciado!', '🏃');
         } else {
             clearInterval(intervalo);
             iniciarTreinoReal();
@@ -622,10 +616,16 @@ function trocarFase() {
         if (config.tempoCaminhada > 0) {
             fase = 'caminhada';
             tempoRestante = config.tempoCaminhada;
+            
+            // Beep e vibração
             tocarTroca();
             vibrar(300);
-            falarComBeep('CAMINHADA!', 600);
-            enviarNotificacao('Caminhada', 'Agora caminhe!', '🚶');
+            
+            // Aguardar beep terminar antes de falar
+            setTimeout(() => {
+                falarTexto('CAMINHADA!');
+            }, 500);
+            
             atualizarDisplay();
         } else {
             proximaRepeticao();
@@ -646,10 +646,15 @@ function proximaRepeticao() {
             distanciaPercorrida = 0;
         }
         
+        // Beep e vibração
         tocarTroca();
         vibrar(300);
-        falarComBeep('CORRIDA!', 800);
-        enviarNotificacao('Corrida', `Repetição ${repeticaoAtual} de ${repeticaoTotal}`, '🏃');
+        
+        // Aguardar beep terminar antes de falar
+        setTimeout(() => {
+            falarTexto('CORRIDA!');
+        }, 500);
+        
         atualizarDisplay();
     } else {
         finalizarComSucesso();
