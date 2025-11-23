@@ -33,6 +33,10 @@ let wakeLock = null;
 let audioSilencioso = null;
 let audioSilenciosoSource = null;
 
+// Voz Sintetizada
+let vozSelecionada = null;
+let vozesDisponiveis = [];
+
 // ========================================
 // FUNÇÕES DE NAVEGAÇÃO
 // ========================================
@@ -52,6 +56,9 @@ function requestPermissions() {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
     
+    // Carregar vozes para síntese de fala
+    carregarVozes();
+    
     // Solicitar permissão para notificações
     solicitarPermissaoNotificacoes();
     
@@ -69,8 +76,10 @@ function requestPermissions() {
         navigator.vibrate(200);
     }
     
-    // Testar notificação
-    enviarNotificacao('Running Trainer', 'App configurado! Agora funciona com tela bloqueada.');
+    // Testar voz
+    setTimeout(() => {
+        falarTexto('Running Trainer configurado! Pronto para treinar!');
+    }, 500);
 }
 
 // ========================================
@@ -147,8 +156,87 @@ async function solicitarPermissaoNotificacoes() {
 }
 
 // ========================================
-// WAKE LOCK - Mantém tela ligada
+// VOZ SINTETIZADA
 // ========================================
+
+function carregarVozes() {
+    // Carregar vozes disponíveis
+    vozesDisponiveis = speechSynthesis.getVoices();
+    
+    // Tentar encontrar voz do Google em português do Brasil
+    vozSelecionada = vozesDisponiveis.find(voice => 
+        voice.name.includes('Google') && voice.lang === 'pt-BR'
+    );
+    
+    // Se não encontrar Google, procurar qualquer voz pt-BR
+    if (!vozSelecionada) {
+        vozSelecionada = vozesDisponiveis.find(voice => 
+            voice.lang === 'pt-BR'
+        );
+    }
+    
+    // Se ainda não encontrar, usar qualquer voz em português
+    if (!vozSelecionada) {
+        vozSelecionada = vozesDisponiveis.find(voice => 
+            voice.lang.startsWith('pt')
+        );
+    }
+    
+    // Fallback para primeira voz disponível
+    if (!vozSelecionada && vozesDisponiveis.length > 0) {
+        vozSelecionada = vozesDisponiveis[0];
+    }
+    
+    console.log('✓ Voz selecionada:', vozSelecionada ? vozSelecionada.name : 'Nenhuma');
+}
+
+// Garantir que vozes sejam carregadas
+if (typeof speechSynthesis !== 'undefined') {
+    speechSynthesis.onvoiceschanged = carregarVozes;
+}
+
+function falarTexto(texto, opcoes = {}) {
+    if (typeof speechSynthesis === 'undefined') {
+        console.log('Síntese de fala não suportada');
+        return;
+    }
+    
+    // Cancelar fala anterior
+    speechSynthesis.cancel();
+    
+    // Criar utterance
+    const utterance = new SpeechSynthesisUtterance(texto);
+    
+    // Configurações
+    utterance.voice = vozSelecionada;
+    utterance.lang = 'pt-BR';
+    utterance.volume = opcoes.volume || 1.0;
+    utterance.rate = opcoes.rate || 0.95; // Levemente mais devagar para clareza
+    utterance.pitch = opcoes.pitch || 1.1; // Levemente mais agudo para penetrar ruído
+    
+    // Callback quando terminar
+    if (opcoes.onEnd) {
+        utterance.onend = opcoes.onEnd;
+    }
+    
+    // Falar
+    try {
+        speechSynthesis.speak(utterance);
+        console.log('🗣️ Falando:', texto);
+    } catch (error) {
+        console.error('Erro ao falar:', error);
+    }
+}
+
+function falarComBeep(texto, frequenciaBeep = 1000) {
+    // Tocar beep primeiro
+    tocarBeep(frequenciaBeep, 0.3);
+    
+    // Falar após pequeno delay
+    setTimeout(() => {
+        falarTexto(texto);
+    }, 350);
+}
 
 async function solicitarWakeLock() {
     if (!('wakeLock' in navigator)) {
@@ -290,6 +378,7 @@ function iniciarContagemRegressiva() {
     
     tocarBeep();
     vibrar(200);
+    falarTexto(contador.toString());
     enviarNotificacao('Preparar', `Iniciando em ${contador}...`, '⏱️');
     
     const intervalo = setInterval(() => {
@@ -299,11 +388,13 @@ function iniciarContagemRegressiva() {
             document.getElementById('faseAtual').textContent = contador;
             tocarBeep();
             vibrar(200);
+            falarTexto(contador.toString());
             enviarNotificacao('Preparar', `${contador}...`, '⏱️');
         } else if (contador === 0) {
             document.getElementById('faseAtual').textContent = 'VAI!';
             tocarBeep(1000, 0.5);
             vibrar(500);
+            falarTexto('VAI!', { pitch: 1.3, rate: 1.0 });
             enviarNotificacao('VAI!', 'Treino iniciado!', '🏃');
         } else {
             clearInterval(intervalo);
@@ -380,6 +471,7 @@ function trocarFase() {
             tempoRestante = config.tempoCaminhada;
             tocarTroca();
             vibrar(300);
+            falarComBeep('CAMINHADA!', 600);
             enviarNotificacao('Caminhada', 'Agora caminhe!', '🚶');
             atualizarDisplay();
         } else {
@@ -403,6 +495,7 @@ function proximaRepeticao() {
         
         tocarTroca();
         vibrar(300);
+        falarComBeep('CORRIDA!', 800);
         enviarNotificacao('Corrida', `Repetição ${repeticaoAtual} de ${repeticaoTotal}`, '🏃');
         atualizarDisplay();
     } else {
@@ -510,10 +603,19 @@ function finalizarComSucesso() {
     setTimeout(() => { tocarFinal(); vibrar(400); }, 500);
     setTimeout(() => { tocarFinal(); vibrar(400); }, 1000);
     
+    // Voz de parabéns
+    setTimeout(() => {
+        falarTexto('PARABÉNS! TREINO CONCLUÍDO!', { 
+            pitch: 1.2, 
+            rate: 0.9,
+            volume: 1.0 
+        });
+    }, 1500);
+    
     // Notificação de conclusão
     enviarNotificacao('🎉 Parabéns!', 'Você concluiu o treino com sucesso!', '🏆');
     
-    setTimeout(() => showScreen('menuScreen'), 5000);
+    setTimeout(() => showScreen('menuScreen'), 6000);
 }
 
 function limparTreino() {
