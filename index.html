@@ -25,6 +25,11 @@
                 <button class="btn btn-secondary" onclick="showScreen('distanciaScreen')">
                     Treino por DISTÂNCIA
                 </button>
+                
+                <!-- Botão de Teste de Voz -->
+                <button class="btn" style="background: linear-gradient(135deg, #00cc66 0%, #009944 100%); font-size: 18px; padding: 15px;" onclick="testarVozManual()">
+                    🎤 Testar Voz
+                </button>
             </div>
         </div>
     </div>
@@ -140,8 +145,12 @@
             </ul>
             <p class="warning-text">⚠️ <strong>IMPORTANTE:</strong> Durante o treino, mantenha o app aberto (pode bloquear a tela). Não feche o app nem abra outros aplicativos. Você ouvirá "CORRIDA!" e "CAMINHADA!" em voz alta.</p>
             <button class="btn btn-primary" onclick="requestPermissions()">
-                PERMITIR E CONFIGURAR
+                🎤 ATIVAR VOZ E PERMITIR
             </button>
+            <p style="font-size: 12px; color: #666; margin-top: 10px; text-align: center;">
+                Clique no botão acima para ativar a voz sintetizada.<br>
+                Você ouvirá uma mensagem de confirmação.
+            </p>
         </div>
     </div>
 
