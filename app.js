@@ -36,6 +36,7 @@ let audioSilenciosoSource = null;
 // Voz Sintetizada
 let vozSelecionada = null;
 let vozesDisponiveis = [];
+let preferenciaTipoVoz = 'auto'; // 'auto', 'feminina', 'masculina'
 
 // ========================================
 // FUNÇÕES DE NAVEGAÇÃO
@@ -86,9 +87,54 @@ function testarVozManual() {
     }});
 }
 
-// ========================================
-// PERMISSÕES
-// ========================================
+// Função para atualizar voz quando usuário mudar o select
+function atualizarVoz() {
+    const seletorMenu = document.getElementById('seletorVozMenu');
+    const seletorModal = document.getElementById('seletorVoz');
+    
+    // Sincronizar os dois seletores
+    if (seletorMenu && seletorModal) {
+        preferenciaTipoVoz = seletorMenu.value;
+        seletorModal.value = preferenciaTipoVoz;
+    } else if (seletorMenu) {
+        preferenciaTipoVoz = seletorMenu.value;
+    } else if (seletorModal) {
+        preferenciaTipoVoz = seletorModal.value;
+    }
+    
+    console.log('🎤 Preferência atualizada para:', preferenciaTipoVoz);
+    
+    // Recarregar vozes com nova preferência
+    carregarVozes();
+    
+    // Salvar preferência no localStorage
+    try {
+        localStorage.setItem('vozPreferida', preferenciaTipoVoz);
+    } catch (e) {
+        console.log('Não foi possível salvar preferência');
+    }
+}
+
+// Carregar preferência salva ao iniciar
+function carregarPreferenciaVoz() {
+    try {
+        const vozSalva = localStorage.getItem('vozPreferida');
+        if (vozSalva) {
+            preferenciaTipoVoz = vozSalva;
+            
+            // Atualizar seletores
+            const seletorMenu = document.getElementById('seletorVozMenu');
+            const seletorModal = document.getElementById('seletorVoz');
+            
+            if (seletorMenu) seletorMenu.value = vozSalva;
+            if (seletorModal) seletorModal.value = vozSalva;
+            
+            console.log('✓ Preferência carregada:', vozSalva);
+        }
+    } catch (e) {
+        console.log('Sem preferência salva');
+    }
+}
 
 function requestPermissions() {
     // Criar AudioContext para sons
@@ -245,27 +291,61 @@ function carregarVozes() {
         return;
     }
     
-    // PRIORIDADE MÁXIMA: Google Português do Brasil FEMININA
-    vozSelecionada = vozesDisponiveis.find(voice => 
-        voice.lang === 'pt-BR' && 
-        voice.name.toLowerCase().includes('google') &&
-        (voice.name.toLowerCase().includes('female') || 
-         voice.name.toLowerCase().includes('luciana') ||
-         !voice.name.toLowerCase().includes('male'))
-    );
-    
-    if (vozSelecionada) {
-        console.log('✓ Voz Google pt-BR FEMININA selecionada:', vozSelecionada.name);
-        return;
+    // Pegar preferência do usuário
+    const seletor = document.getElementById('seletorVoz');
+    if (seletor) {
+        preferenciaTipoVoz = seletor.value;
     }
     
-    // Se não achou, tentar Google pt-BR (qualquer)
+    console.log('🎤 Preferência do usuário:', preferenciaTipoVoz);
+    
+    // Selecionar voz baseado na preferência
+    if (preferenciaTipoVoz === 'feminina') {
+        // Usuário quer voz FEMININA
+        vozSelecionada = vozesDisponiveis.find(voice => 
+            voice.lang === 'pt-BR' && 
+            (voice.name.toLowerCase().includes('maria') || 
+             voice.name.toLowerCase().includes('female') ||
+             voice.name.toLowerCase().includes('feminina'))
+        );
+        
+        if (vozSelecionada) {
+            console.log('✓ Voz FEMININA selecionada:', vozSelecionada.name);
+            return;
+        }
+    } else if (preferenciaTipoVoz === 'masculina') {
+        // Usuário quer voz MASCULINA
+        vozSelecionada = vozesDisponiveis.find(voice => 
+            voice.lang === 'pt-BR' && 
+            (voice.name.toLowerCase().includes('daniel') || 
+             voice.name.toLowerCase().includes('male') ||
+             voice.name.toLowerCase().includes('masculina'))
+        );
+        
+        if (vozSelecionada) {
+            console.log('✓ Voz MASCULINA selecionada:', vozSelecionada.name);
+            return;
+        }
+    }
+    
+    // Se chegou aqui, ou é "auto" ou não achou a preferida
+    // Tentar Google pt-BR (melhor qualidade)
     vozSelecionada = vozesDisponiveis.find(voice => 
         voice.lang === 'pt-BR' && voice.name.toLowerCase().includes('google')
     );
     
     if (vozSelecionada) {
         console.log('✓ Voz Google pt-BR selecionada:', vozSelecionada.name);
+        return;
+    }
+    
+    // Tentar Microsoft pt-BR
+    vozSelecionada = vozesDisponiveis.find(voice => 
+        voice.lang === 'pt-BR' && voice.name.toLowerCase().includes('microsoft')
+    );
+    
+    if (vozSelecionada) {
+        console.log('✓ Voz Microsoft pt-BR selecionada:', vozSelecionada.name);
         return;
     }
     
@@ -276,7 +356,7 @@ function carregarVozes() {
         console.log('✓ Voz pt-BR selecionada:', vozSelecionada.name);
     } else {
         vozSelecionada = vozesDisponiveis[0];
-        console.log('⚠️ Usando voz padrão:', vozSelecionada.name);
+        console.log('⚠️ Usando voz padrão:', vozSelecionada ? vozSelecionada.name : 'nenhuma');
     }
 }
 
@@ -799,6 +879,9 @@ if ('serviceWorker' in navigator) {
 
 window.addEventListener('load', () => {
     console.log('🏃 Running Trainer PWA Iniciado');
+    
+    // Carregar preferência de voz salva
+    carregarPreferenciaVoz();
     
     // Carregar vozes imediatamente
     carregarVozes();
