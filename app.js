@@ -102,17 +102,38 @@ function atualizarVoz() {
         preferenciaTipoVoz = seletorModal.value;
     }
     
-    console.log('🎤 Preferência atualizada para:', preferenciaTipoVoz);
+    console.log('🔄 Preferência atualizada para:', preferenciaTipoVoz);
+    
+    // FORÇAR recarregamento da voz
+    vozSelecionada = null; // Resetar voz atual
     
     // Recarregar vozes com nova preferência
     carregarVozes();
     
+    console.log('✓ Nova voz carregada:', vozSelecionada ? vozSelecionada.name : 'nenhuma');
+    
     // Salvar preferência no localStorage
     try {
         localStorage.setItem('vozPreferida', preferenciaTipoVoz);
+        console.log('💾 Preferência salva:', preferenciaTipoVoz);
     } catch (e) {
-        console.log('Não foi possível salvar preferência');
+        console.log('⚠️ Não foi possível salvar preferência');
     }
+}
+
+// Função para sincronizar os dois seletores
+function sincronizarSeletores() {
+    const seletorMenu = document.getElementById('seletorVozMenu');
+    const seletorModal = document.getElementById('seletorVoz');
+    
+    if (seletorMenu && seletorModal) {
+        // Garantir que ambos tenham o mesmo valor
+        if (seletorMenu.value !== seletorModal.value) {
+            seletorModal.value = seletorMenu.value;
+        }
+    }
+    
+    console.log('🔄 Seletores sincronizados:', preferenciaTipoVoz);
 }
 
 // Carregar preferência salva ao iniciar
@@ -132,7 +153,7 @@ function carregarPreferenciaVoz() {
             console.log('✓ Preferência carregada:', vozSalva);
         }
     } catch (e) {
-        console.log('Sem preferência salva');
+        console.log('⚠️ Sem preferência salva');
     }
 }
 
@@ -292,43 +313,71 @@ function carregarVozes() {
     }
     
     // Pegar preferência do usuário
-    const seletor = document.getElementById('seletorVoz');
+    const seletor = document.getElementById('seletorVoz') || document.getElementById('seletorVozMenu');
     if (seletor) {
         preferenciaTipoVoz = seletor.value;
     }
     
     console.log('🎤 Preferência do usuário:', preferenciaTipoVoz);
     
+    // IMPORTANTE: Sempre resetar voz antes de selecionar nova
+    vozSelecionada = null;
+    
     // Selecionar voz baseado na preferência
     if (preferenciaTipoVoz === 'feminina') {
-        // Usuário quer voz FEMININA
+        console.log('👩 Procurando voz FEMININA...');
+        
+        // Tentar encontrar Maria primeiro
         vozSelecionada = vozesDisponiveis.find(voice => 
             voice.lang === 'pt-BR' && 
-            (voice.name.toLowerCase().includes('maria') || 
-             voice.name.toLowerCase().includes('female') ||
-             voice.name.toLowerCase().includes('feminina'))
+            voice.name.toLowerCase().includes('maria')
         );
+        
+        if (!vozSelecionada) {
+            // Tentar qualquer voz feminina
+            vozSelecionada = vozesDisponiveis.find(voice => 
+                voice.lang === 'pt-BR' && 
+                (voice.name.toLowerCase().includes('female') ||
+                 voice.name.toLowerCase().includes('feminina') ||
+                 voice.name.toLowerCase().includes('luciana'))
+            );
+        }
         
         if (vozSelecionada) {
             console.log('✓ Voz FEMININA selecionada:', vozSelecionada.name);
             return;
+        } else {
+            console.log('⚠️ Voz feminina não encontrada, usando automático');
         }
     } else if (preferenciaTipoVoz === 'masculina') {
-        // Usuário quer voz MASCULINA
+        console.log('👨 Procurando voz MASCULINA...');
+        
+        // Tentar encontrar Daniel primeiro
         vozSelecionada = vozesDisponiveis.find(voice => 
             voice.lang === 'pt-BR' && 
-            (voice.name.toLowerCase().includes('daniel') || 
-             voice.name.toLowerCase().includes('male') ||
-             voice.name.toLowerCase().includes('masculina'))
+            voice.name.toLowerCase().includes('daniel')
         );
+        
+        if (!vozSelecionada) {
+            // Tentar qualquer voz masculina
+            vozSelecionada = vozesDisponiveis.find(voice => 
+                voice.lang === 'pt-BR' && 
+                (voice.name.toLowerCase().includes('male') && 
+                 !voice.name.toLowerCase().includes('female'))
+            );
+        }
         
         if (vozSelecionada) {
             console.log('✓ Voz MASCULINA selecionada:', vozSelecionada.name);
             return;
+        } else {
+            console.log('⚠️ Voz masculina não encontrada, usando automático');
         }
     }
     
     // Se chegou aqui, ou é "auto" ou não achou a preferida
+    console.log('🤖 Usando seleção AUTOMÁTICA...');
+    
     // Tentar Google pt-BR (melhor qualidade)
     vozSelecionada = vozesDisponiveis.find(voice => 
         voice.lang === 'pt-BR' && voice.name.toLowerCase().includes('google')
