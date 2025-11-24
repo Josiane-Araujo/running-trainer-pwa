@@ -18,6 +18,18 @@
             <h1 class="title">Running Trainer</h1>
             <p class="subtitle">Escolha o tipo de treino</p>
             
+            <!-- Seletor de Voz no Menu -->
+            <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 15px; margin-bottom: 20px;">
+                <label style="display: block; color: #e0e0e0; margin-bottom: 8px; font-size: 14px;">
+                    🎤 Voz do Assistente:
+                </label>
+                <select id="seletorVozMenu" onchange="atualizarVoz()" style="width: 100%; padding: 10px; font-size: 14px; border-radius: 8px; border: none; background: white; color: #333;">
+                    <option value="auto">🤖 Automático</option>
+                    <option value="feminina">👩 Feminina (Maria)</option>
+                    <option value="masculina">👨 Masculina (Daniel)</option>
+                </select>
+            </div>
+            
             <div class="button-group">
                 <button class="btn btn-primary" onclick="showScreen('tempoScreen')">
                     Treino por TEMPO
@@ -134,6 +146,22 @@
     <div id="permissionModal" class="modal">
         <div class="modal-content">
             <h3>⚡ Configuração Importante</h3>
+            
+            <!-- Seletor de Voz -->
+            <div style="background: #f0f0f0; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <label style="display: block; font-weight: bold; color: #333; margin-bottom: 10px;">
+                    🎤 Escolha a voz do assistente:
+                </label>
+                <select id="seletorVoz" style="width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 2px solid #667eea; background: white;">
+                    <option value="auto">🤖 Automático (Melhor disponível)</option>
+                    <option value="feminina">👩 Voz Feminina (Maria)</option>
+                    <option value="masculina">👨 Voz Masculina (Daniel)</option>
+                </select>
+                <button class="btn" style="width: 100%; margin-top: 10px; padding: 10px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;" onclick="testarVozSelecionada()">
+                    🔊 Testar Voz Selecionada
+                </button>
+            </div>
+            
             <p>Para o app funcionar com a tela bloqueada, você precisa:</p>
             <ul>
                 <li>🗣️ <strong>Voz Sintetizada</strong> - Alertas falados em português</li>
