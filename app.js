@@ -245,54 +245,38 @@ function carregarVozes() {
         return;
     }
     
-    // IMPORTANTE: Selecionar APENAS UMA voz
-    // Prioridade: 1) Google pt-BR, 2) Qualquer pt-BR, 3) Qualquer pt, 4) Padrão
+    // PRIORIDADE MÁXIMA: Google Português do Brasil FEMININA
+    vozSelecionada = vozesDisponiveis.find(voice => 
+        voice.lang === 'pt-BR' && 
+        voice.name.toLowerCase().includes('google') &&
+        (voice.name.toLowerCase().includes('female') || 
+         voice.name.toLowerCase().includes('luciana') ||
+         !voice.name.toLowerCase().includes('male'))
+    );
     
-    // Tentar Google pt-BR
+    if (vozSelecionada) {
+        console.log('✓ Voz Google pt-BR FEMININA selecionada:', vozSelecionada.name);
+        return;
+    }
+    
+    // Se não achou, tentar Google pt-BR (qualquer)
     vozSelecionada = vozesDisponiveis.find(voice => 
         voice.lang === 'pt-BR' && voice.name.toLowerCase().includes('google')
     );
     
     if (vozSelecionada) {
         console.log('✓ Voz Google pt-BR selecionada:', vozSelecionada.name);
-        return; // PARAR AQUI - já achou a melhor
-    }
-    
-    // Se não encontrou Google, procurar qualquer pt-BR FEMININA
-    vozSelecionada = vozesDisponiveis.find(voice => 
-        voice.lang === 'pt-BR' && 
-        (voice.name.toLowerCase().includes('luciana') || 
-         voice.name.toLowerCase().includes('female') ||
-         voice.name.toLowerCase().includes('feminina'))
-    );
-    
-    if (vozSelecionada) {
-        console.log('✓ Voz pt-BR feminina selecionada:', vozSelecionada.name);
         return;
     }
     
-    // Se não achou feminina, pegar PRIMEIRA pt-BR
+    // Última opção: primeira voz pt-BR
     vozSelecionada = vozesDisponiveis.find(voice => voice.lang === 'pt-BR');
     
     if (vozSelecionada) {
         console.log('✓ Voz pt-BR selecionada:', vozSelecionada.name);
-        return;
-    }
-    
-    // Se ainda não encontrou, qualquer português
-    vozSelecionada = vozesDisponiveis.find(voice => voice.lang.startsWith('pt'));
-    
-    if (vozSelecionada) {
-        console.log('✓ Voz PT selecionada:', vozSelecionada.name);
-        return;
-    }
-    
-    // Último recurso: primeira voz disponível
-    if (vozesDisponiveis.length > 0) {
+    } else {
         vozSelecionada = vozesDisponiveis[0];
         console.log('⚠️ Usando voz padrão:', vozSelecionada.name);
-    } else {
-        console.error('❌ ERRO: Nenhuma voz disponível!');
     }
 }
 
@@ -315,64 +299,53 @@ function falarTexto(texto, opcoes = {}) {
         return;
     }
     
-    // CANCELAR QUALQUER FALA ANTERIOR - MUITO IMPORTANTE!
-    if (speechSynthesis.speaking) {
-        console.log('⚠️ Cancelando fala anterior...');
-        speechSynthesis.cancel();
-    }
+    // CANCELAR IMEDIATAMENTE qualquer fala em andamento
+    speechSynthesis.cancel();
     
     // Recarregar vozes se necessário
     if (vozesDisponiveis.length === 0) {
-        console.log('⚠️ Recarregando vozes...');
         vozesDisponiveis = speechSynthesis.getVoices();
+        carregarVozes();
     }
     
     // Selecionar voz se ainda não selecionou
     if (!vozSelecionada && vozesDisponiveis.length > 0) {
-        console.log('⚠️ Selecionando voz automaticamente...');
         carregarVozes();
     }
     
-    // Aguardar cancelamento completo antes de falar
+    // Pequeno delay para garantir cancelamento
     setTimeout(() => {
         // Criar utterance
         const utterance = new SpeechSynthesisUtterance(texto);
         
-        // Configurações - SEMPRE usar a MESMA voz
+        // SEMPRE usar a mesma voz selecionada
         if (vozSelecionada) {
             utterance.voice = vozSelecionada;
-            console.log('🎤 Usando voz:', vozSelecionada.name);
         }
         
         utterance.lang = 'pt-BR';
         utterance.volume = opcoes.volume !== undefined ? opcoes.volume : 1.0;
         utterance.rate = opcoes.rate !== undefined ? opcoes.rate : 0.95;
-        utterance.pitch = opcoes.pitch !== undefined ? opcoes.pitch : 1.1;
+        utterance.pitch = opcoes.pitch !== undefined ? opcoes.pitch : 1.0;
         
-        // Debug
         utterance.onstart = () => {
-            console.log('✓ Voz iniciada:', texto);
+            console.log('✓ Falando:', texto, '| Voz:', vozSelecionada ? vozSelecionada.name : 'padrão');
         };
         
         utterance.onerror = (event) => {
-            console.error('❌ Erro na voz:', event.error);
+            console.error('❌ Erro ao falar:', event.error);
         };
         
         utterance.onend = () => {
-            console.log('✓ Voz finalizada:', texto);
+            console.log('✓ Finalizou:', texto);
             if (opcoes.onEnd) {
                 opcoes.onEnd();
             }
         };
         
-        // Falar
-        try {
-            speechSynthesis.speak(utterance);
-            console.log('✓ speechSynthesis.speak() chamado');
-        } catch (error) {
-            console.error('❌ Erro ao chamar speak():', error);
-        }
-    }, 150); // Delay para garantir que cancelou
+        // Falar APENAS uma vez
+        speechSynthesis.speak(utterance);
+    }, 200);
 }
 
 function falarComBeep(texto, frequenciaBeep = 1000) {
@@ -525,27 +498,32 @@ function iniciarContagemRegressiva() {
     document.getElementById('infoValor').textContent = '';
     document.getElementById('repeticoesDisplay').textContent = '';
     
-    // Primeiro beep e voz
+    // Beep e voz do 3
     tocarBeep();
     vibrar(200);
-    falarTexto(contador.toString());
+    falarTexto('3');
     
     const intervalo = setInterval(() => {
         contador--;
         
         if (contador > 0) {
+            // Falar 2 ou 1
             document.getElementById('faseAtual').textContent = contador;
             tocarBeep();
             vibrar(200);
             falarTexto(contador.toString());
         } else if (contador === 0) {
+            // Falar VAI
             document.getElementById('faseAtual').textContent = 'VAI!';
             tocarBeep(1000, 0.5);
             vibrar(500);
-            falarTexto('VAI!', { pitch: 1.3, rate: 1.0 });
+            falarTexto('VAI!', { pitch: 1.2 });
         } else {
+            // Parar contagem e iniciar treino
             clearInterval(intervalo);
-            iniciarTreinoReal();
+            setTimeout(() => {
+                iniciarTreinoReal();
+            }, 1000); // Aguarda 1 segundo após "VAI!" antes de começar
         }
     }, 1000);
 }
@@ -567,6 +545,9 @@ function iniciarTreinoReal() {
     }
     
     atualizarDisplay();
+    
+    // FALAR APENAS UMA VEZ ao iniciar a corrida
+    falarTexto('CORRIDA!');
     
     if (tipoTreino === 'tempo') {
         tempoRestante = config.tempoCorrida;
@@ -617,14 +598,14 @@ function trocarFase() {
             fase = 'caminhada';
             tempoRestante = config.tempoCaminhada;
             
-            // Beep e vibração
+            // Beep, vibração e voz APENAS UMA VEZ
             tocarTroca();
             vibrar(300);
             
-            // Aguardar beep terminar antes de falar
+            // Falar APENAS quando trocar
             setTimeout(() => {
                 falarTexto('CAMINHADA!');
-            }, 500);
+            }, 400);
             
             atualizarDisplay();
         } else {
@@ -646,14 +627,14 @@ function proximaRepeticao() {
             distanciaPercorrida = 0;
         }
         
-        // Beep e vibração
+        // Beep, vibração e voz APENAS UMA VEZ
         tocarTroca();
         vibrar(300);
         
-        // Aguardar beep terminar antes de falar
+        // Falar APENAS quando trocar para nova repetição
         setTimeout(() => {
             falarTexto('CORRIDA!');
-        }, 500);
+        }, 400);
         
         atualizarDisplay();
     } else {
