@@ -23,7 +23,7 @@
                 <label style="display: block; color: #e0e0e0; margin-bottom: 8px; font-size: 14px;">
                     🎤 Voz do Assistente:
                 </label>
-                <select id="seletorVozMenu" onchange="atualizarVoz()" style="width: 100%; padding: 10px; font-size: 14px; border-radius: 8px; border: none; background: white; color: #333;">
+                <select id="seletorVozMenu" onchange="atualizarVoz(); sincronizarSeletores();" style="width: 100%; padding: 10px; font-size: 14px; border-radius: 8px; border: none; background: white; color: #333;">
                     <option value="auto">🤖 Automático</option>
                     <option value="feminina">👩 Feminina (Maria)</option>
                     <option value="masculina">👨 Masculina (Daniel)</option>
@@ -152,7 +152,7 @@
                 <label style="display: block; font-weight: bold; color: #333; margin-bottom: 10px;">
                     🎤 Escolha a voz do assistente:
                 </label>
-                <select id="seletorVoz" style="width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 2px solid #667eea; background: white;">
+                <select id="seletorVoz" onchange="atualizarVoz(); sincronizarSeletores();" style="width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 2px solid #667eea; background: white;">
                     <option value="auto">🤖 Automático (Melhor disponível)</option>
                     <option value="feminina">👩 Voz Feminina (Maria)</option>
                     <option value="masculina">👨 Voz Masculina (Daniel)</option>
