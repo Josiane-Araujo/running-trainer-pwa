@@ -11,10 +11,12 @@ let watchId = null;
 
 // Configurações do treino
 let config = {
-    tempoCorrida: 0,
+    tempoCorrida1: 0,
     tempoCaminhada: 0,
-    distCorrida: 0,
+    tempoCorrida2: 0,
+    distCorrida1: 0,
     distCaminhada: 0,
+    distCorrida2: 0,
     repeticoes: 0
 };
 
@@ -562,16 +564,17 @@ function pararAudioSilencioso() {
 }
 
 // ========================================
-// INICIAR TREINO POR TEMPO
+// INICIAR TREINO POR TEMPO (AVANÇADO)
 // ========================================
 
-function iniciarTreinoTempo() {
-    const tempoCorrida = parseInt(document.getElementById('tempoCorrida').value) || 0;
+function iniciarTreinoTempoAvancado() {
+    const tempoCorrida1 = parseInt(document.getElementById('tempoCorrida1').value) || 0;
     const tempoCaminhada = parseInt(document.getElementById('tempoCaminhada').value) || 0;
+    const tempoCorrida2 = parseInt(document.getElementById('tempoCorrida2').value) || 0;
     const repeticoes = parseInt(document.getElementById('repeticoes').value) || 0;
     
-    if (tempoCorrida <= 0 || repeticoes <= 0) {
-        alert('⚠️ Preencha o tempo de corrida e número de repetições!');
+    if (tempoCorrida1 <= 0 || repeticoes <= 0) {
+        alert('⚠️ Preencha o 1º tempo de corrida e número de repetições!');
         return;
     }
     
@@ -581,8 +584,9 @@ function iniciarTreinoTempo() {
     }
     
     tipoTreino = 'tempo';
-    config.tempoCorrida = tempoCorrida * 60;
+    config.tempoCorrida1 = tempoCorrida1 * 60;
     config.tempoCaminhada = tempoCaminhada * 60;
+    config.tempoCorrida2 = tempoCorrida2 * 60;
     config.repeticoes = repeticoes;
     
     showScreen('treinoScreen');
@@ -590,16 +594,17 @@ function iniciarTreinoTempo() {
 }
 
 // ========================================
-// INICIAR TREINO POR DISTÂNCIA
+// INICIAR TREINO POR DISTÂNCIA (AVANÇADO)
 // ========================================
 
-function iniciarTreinoDistancia() {
-    const distCorrida = parseFloat(document.getElementById('distCorrida').value) || 0;
+function iniciarTreinoDistanciaAvancado() {
+    const distCorrida1 = parseFloat(document.getElementById('distCorrida1').value) || 0;
     const distCaminhada = parseFloat(document.getElementById('distCaminhada').value) || 0;
+    const distCorrida2 = parseFloat(document.getElementById('distCorrida2').value) || 0;
     const repeticoes = parseInt(document.getElementById('repeticoesDist').value) || 0;
     
-    if (distCorrida <= 0 || repeticoes <= 0) {
-        alert('⚠️ Preencha a distância de corrida e número de repetições!');
+    if (distCorrida1 <= 0 || repeticoes <= 0) {
+        alert('⚠️ Preencha a 1ª distância de corrida e número de repetições!');
         return;
     }
     
@@ -609,8 +614,9 @@ function iniciarTreinoDistancia() {
     }
     
     tipoTreino = 'distancia';
-    config.distCorrida = distCorrida;
+    config.distCorrida1 = distCorrida1;
     config.distCaminhada = distCaminhada;
+    config.distCorrida2 = distCorrida2;
     config.repeticoes = repeticoes;
     
     showScreen('treinoScreen');
@@ -665,7 +671,7 @@ function iniciarTreinoReal() {
     treinoAtivo = true;
     repeticaoAtual = 1;
     repeticaoTotal = config.repeticoes;
-    fase = 'corrida';
+    fase = 'corrida1';
     
     // Ativar Wake Lock e áudio para manter ativo
     solicitarWakeLock();
@@ -679,7 +685,7 @@ function iniciarTreinoReal() {
     falarTexto('CORRIDA!');
     
     if (tipoTreino === 'tempo') {
-        tempoRestante = config.tempoCorrida;
+        tempoRestante = config.tempoCorrida1;
         document.getElementById('infoLabel').textContent = 'Tempo Restante';
         intervaloTreino = setInterval(atualizarTreinoTempo, 1000);
     } else {
@@ -691,11 +697,17 @@ function iniciarTreinoReal() {
 }
 
 function atualizarDisplay() {
-    document.getElementById('faseAtual').textContent = fase === 'corrida' ? 'Corrida' : 'Caminhada';
+    // Atualizar texto da fase
+    if (fase === 'corrida1' || fase === 'corrida2') {
+        document.getElementById('faseAtual').textContent = 'Corrida';
+    } else {
+        document.getElementById('faseAtual').textContent = 'Caminhada';
+    }
+    
     document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
     
     const indicador = document.getElementById('indicadorFase');
-    if (fase === 'corrida') {
+    if (fase === 'corrida1' || fase === 'corrida2') {
         indicador.classList.remove('caminhada');
     } else {
         indicador.classList.add('caminhada');
@@ -722,25 +734,71 @@ function atualizarTreinoTempo() {
 }
 
 function trocarFase() {
-    if (fase === 'corrida') {
-        if (config.tempoCaminhada > 0) {
+    if (fase === 'corrida1') {
+        // Acabou 1ª corrida
+        if (config.tempoCaminhada > 0 || config.distCaminhada > 0) {
+            // Tem caminhada
             fase = 'caminhada';
-            tempoRestante = config.tempoCaminhada;
             
-            // Beep, vibração e voz APENAS UMA VEZ
+            if (tipoTreino === 'tempo') {
+                tempoRestante = config.tempoCaminhada;
+            } else {
+                distanciaPercorrida = 0;
+            }
+            
             tocarTroca();
             vibrar(300);
-            
-            // Falar APENAS quando trocar
             setTimeout(() => {
                 falarTexto('CAMINHADA!');
             }, 400);
             
             atualizarDisplay();
+        } else if (config.tempoCorrida2 > 0 || config.distCorrida2 > 0) {
+            // Não tem caminhada mas tem 2ª corrida
+            fase = 'corrida2';
+            
+            if (tipoTreino === 'tempo') {
+                tempoRestante = config.tempoCorrida2;
+            } else {
+                distanciaPercorrida = 0;
+            }
+            
+            tocarTroca();
+            vibrar(300);
+            setTimeout(() => {
+                falarTexto('SEGUNDA CORRIDA!');
+            }, 400);
+            
+            atualizarDisplay();
         } else {
+            // Não tem caminhada nem 2ª corrida, próxima repetição
             proximaRepeticao();
         }
-    } else {
+    } else if (fase === 'caminhada') {
+        // Acabou caminhada
+        if (config.tempoCorrida2 > 0 || config.distCorrida2 > 0) {
+            // Tem 2ª corrida
+            fase = 'corrida2';
+            
+            if (tipoTreino === 'tempo') {
+                tempoRestante = config.tempoCorrida2;
+            } else {
+                distanciaPercorrida = 0;
+            }
+            
+            tocarTroca();
+            vibrar(300);
+            setTimeout(() => {
+                falarTexto('SEGUNDA CORRIDA!');
+            }, 400);
+            
+            atualizarDisplay();
+        } else {
+            // Não tem 2ª corrida, próxima repetição
+            proximaRepeticao();
+        }
+    } else if (fase === 'corrida2') {
+        // Acabou 2ª corrida, próxima repetição
         proximaRepeticao();
     }
 }
@@ -748,10 +806,10 @@ function trocarFase() {
 function proximaRepeticao() {
     if (repeticaoAtual < repeticaoTotal) {
         repeticaoAtual++;
-        fase = 'corrida';
+        fase = 'corrida1'; // Volta para 1ª corrida
         
         if (tipoTreino === 'tempo') {
-            tempoRestante = config.tempoCorrida;
+            tempoRestante = config.tempoCorrida1;
         } else {
             distanciaPercorrida = 0;
         }
