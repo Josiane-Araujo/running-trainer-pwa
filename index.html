@@ -1,4 +1,60 @@
-<div class="form">
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a1e">
+    <title>Running Trainer</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Tela Menu -->
+    <div id="menuScreen" class="screen active">
+        <div class="container">
+            <h1 class="title">Running Trainer</h1>
+            <p class="subtitle">Escolha o tipo de treino</p>
+            
+            <!-- Seletor de Voz no Menu -->
+            <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 15px; margin-bottom: 20px;">
+                <label style="display: block; color: #e0e0e0; margin-bottom: 8px; font-size: 14px;">
+                    🎤 Voz do Assistente:
+                </label>
+                <select id="seletorVozMenu" onchange="atualizarVoz(); sincronizarSeletores();" style="width: 100%; padding: 10px; font-size: 14px; border-radius: 8px; border: none; background: white; color: #333;">
+                    <option value="auto">🤖 Automático</option>
+                    <option value="feminina">👩 Feminina (Maria)</option>
+                    <option value="masculina">👨 Masculina (Daniel)</option>
+                </select>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="showScreen('tempoScreen')">
+                    Treino por TEMPO
+                </button>
+                <button class="btn btn-secondary" onclick="showScreen('distanciaScreen')">
+                    Treino por DISTÂNCIA
+                </button>
+                
+                <!-- Botão de Teste de Voz -->
+                <button class="btn" style="background: linear-gradient(135deg, #00cc66 0%, #009944 100%); font-size: 18px; padding: 15px;" onclick="testarVozManual()">
+                    🎤 Testar Voz
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela Treino por Tempo -->
+    <div id="tempoScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <button class="btn-back" onclick="showScreen('menuScreen')">← Voltar</button>
+                <h2 class="screen-title">Treino por Tempo</h2>
+            </div>
+
+           <div class="form">
                 <div class="form-group">
                     <label>⭐ 1º Tempo de CORRIDA (minutos)</label>
                     <input type="number" id="tempoCorrida" placeholder="Ex: 2" min="1">
@@ -23,3 +79,115 @@
                     INICIAR TREINO
                 </button>
             </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela Treino por Distância -->
+    <div id="distanciaScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <button class="btn-back" onclick="showScreen('menuScreen')">← Voltar</button>
+                <h2 class="screen-title">Treino por Distância</h2>
+            </div>
+
+            <div class="form">
+                <div class="form-group">
+                    <label>Distância de CORRIDA (km)</label>
+                    <input type="number" id="distCorrida" placeholder="Ex: 0.2 (200m) ou 2" step="0.1" min="0.1">
+                </div>
+
+                <div class="form-group">
+                    <label>Distância de CAMINHADA (km)</label>
+                    <input type="number" id="distCaminhada" placeholder="Ex: 0.1 (opcional)" step="0.1" min="0">
+                </div>
+
+                <div class="form-group">
+                    <label>Número de REPETIÇÕES</label>
+                    <input type="number" id="repeticoesDist" placeholder="Ex: 10" min="1">
+                </div>
+
+                <p class="info-text">📍 GPS será ativado durante o treino</p>
+
+                <button class="btn btn-success" onclick="iniciarTreinoDistancia()">
+                    INICIAR TREINO
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela de Treino -->
+    <div id="treinoScreen" class="screen">
+        <div class="container treino-container">
+            <div class="fase-atual" id="faseAtual">Preparar</div>
+
+            <div class="info-principal">
+                <div class="info-box">
+                    <div class="info-label" id="infoLabel">Tempo Restante</div>
+                    <div class="info-valor" id="infoValor">00:00</div>
+                </div>
+
+                <div class="info-box">
+                    <div class="info-label">Repetições</div>
+                    <div class="info-valor-small" id="repeticoesDisplay">0 / 0</div>
+                </div>
+            </div>
+
+            <div class="indicador-fase" id="indicadorFase"></div>
+
+            <div class="controles">
+                <button class="btn btn-warning" id="btnPausar" onclick="pausarTreino()">
+                    PAUSAR
+                </button>
+                <button class="btn btn-danger" onclick="finalizarTreino()">
+                    FINALIZAR
+                </button>
+            </div>
+
+            <div class="info-extra" id="infoExtra"></div>
+        </div>
+    </div>
+
+    <!-- Modal de Permissões -->
+    <div id="permissionModal" class="modal">
+        <div class="modal-content">
+            <h3>⚡ Configuração Importante</h3>
+            
+            <!-- Seletor de Voz -->
+            <div style="background: #f0f0f0; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <label style="display: block; font-weight: bold; color: #333; margin-bottom: 10px;">
+                    🎤 Escolha a voz do assistente:
+                </label>
+                <select id="seletorVoz" onchange="atualizarVoz(); sincronizarSeletores();" style="width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 2px solid #667eea; background: white;">
+                    <option value="auto">🤖 Automático (Melhor disponível)</option>
+                    <option value="feminina">👩 Voz Feminina (Maria)</option>
+                    <option value="masculina">👨 Voz Masculina (Daniel)</option>
+                </select>
+                <button class="btn" style="width: 100%; margin-top: 10px; padding: 10px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;" onclick="testarVozSelecionada()">
+                    🔊 Testar Voz Selecionada
+                </button>
+            </div>
+            
+            <p>Para o app funcionar com a tela bloqueada, você precisa:</p>
+            <ul>
+                <li>🗣️ <strong>Voz Sintetizada</strong> - Alertas falados em português</li>
+                <li>🔊 <strong>Áudio</strong> - Sons de alerta (beeps)</li>
+                <li>📳 <strong>Vibração</strong> - Alertas táteis</li>
+                <li>🔔 <strong>Notificações</strong> - Alertas na tela bloqueada</li>
+                <li>🔒 <strong>Tela Ligada</strong> - Mantém app ativo</li>
+                <li>📍 <strong>Localização</strong> - Para treino por distância</li>
+            </ul>
+            <p class="warning-text">⚠️ <strong>IMPORTANTE:</strong> Durante o treino, mantenha o app aberto (pode bloquear a tela). Não feche o app nem abra outros aplicativos. Você ouvirá "CORRIDA!" e "CAMINHADA!" em voz alta.</p>
+            <button class="btn btn-primary" onclick="requestPermissions()">
+                🎤 ATIVAR VOZ E PERMITIR
+            </button>
+            <p style="font-size: 12px; color: #666; margin-top: 10px; text-align: center;">
+                Clique no botão acima para ativar a voz sintetizada.<br>
+                Você ouvirá uma mensagem de confirmação.
+            </p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
