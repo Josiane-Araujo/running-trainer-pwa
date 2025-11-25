@@ -62,17 +62,17 @@ function testarVozManual() {
     vibrar(200);
     
     // Testar sequência SEM BEEPS (só voz)
-    falarTexto('3', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
+    falarTexto('3', { volume: 1.5, rate: 1.0, pitch: 1.0, onEnd: () => {
         setTimeout(() => {
-            falarTexto('2', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
+            falarTexto('2', { volume: 1.5, rate: 1.0, pitch: 1.0, onEnd: () => {
                 setTimeout(() => {
-                    falarTexto('1', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
+                    falarTexto('1', { volume: 1.5, rate: 1.0, pitch: 1.0, onEnd: () => {
                         setTimeout(() => {
-                            falarTexto('VAI!', { volume: 1.0, rate: 1.0, pitch: 1.2, onEnd: () => {
+                            falarTexto('VAI!', { volume: 1.5, rate: 1.0, pitch: 1.2, onEnd: () => {
                                 setTimeout(() => {
-                                    falarTexto('CORRIDA!', { volume: 1.0, rate: 0.95, pitch: 1.1, onEnd: () => {
+                                    falarTexto('CORRIDA!', { volume: 2.0, rate: 0.95, pitch: 1.1, onEnd: () => {
                                         setTimeout(() => {
-                                            falarTexto('CAMINHADA!', { volume: 1.0, rate: 0.95, pitch: 1.1, onEnd: () => {
+                                            falarTexto('CAMINHADA!', { volume: 2.0, rate: 0.95, pitch: 1.1, onEnd: () => {
                                                 setTimeout(() => {
                                                     falarTexto('PARABÉNS! Voz funcionando perfeitamente!', { volume: 1.0, rate: 0.9, pitch: 1.1 });
                                                 }, 1500);
@@ -934,7 +934,7 @@ function finalizarComSucesso() {
         falarTexto('PARABÉNS! TREINO CONCLUÍDO!', { 
             pitch: 1.2, 
             rate: 0.9,
-            volume: 1.0 
+            volume: 1.5
         });
     }, 1500);
     
@@ -1006,3 +1006,4 @@ window.addEventListener('load', () => {
         }
     }, 1000);
 });
+
