@@ -1,25 +1,35 @@
+// app.js - Running Trainer (atualizado)
 // Estado do Aplicativo
 let treinoAtivo = false;
 let pausado = false;
-let tipoTreino = '';
-let tempoRestante = 0;
-let repeticaoAtual = 0;
-let repeticaoTotal = 0;
-let fase = 'corrida';
+let tipoTreino = ''; // 'tempo' | 'distancia'
+let fase = null; // objeto { kind: 'corrida1'|'caminhada'|'corrida2', target: number (s ou km) }
 let intervaloTreino = null;
 let watchId = null;
 
-// Configurações do treino
+// Configurações do treino (novas chaves para 1º e 2º corrida)
 let config = {
-    tempoCorrida: 0,
+    // tempo (em segundos)
+    tempoCorrida1: 0,
     tempoCaminhada: 0,
-    distCorrida: 0,
+    tempoCorrida2: 0,
+    // distância (em km)
+    distCorrida1: 0,
     distCaminhada: 0,
+    distCorrida2: 0,
+    // repeticoes
     repeticoes: 0
 };
 
+// Estado dinâmico de repetição/fase
+let repeticaoAtual = 0;
+let repeticaoTotal = 0;
+let fasesDaRepeticao = []; // array de fases para a repetição atual
+let indiceFase = 0;
+let tempoRestante = 0; // em segundos - usado no modo tempo
+let faseDistanciaAcumulada = 0; // em km - usado no modo distancia
+
 // GPS
-let distanciaPercorrida = 0;
 let ultimaLocalizacao = null;
 
 // Audio Context para sons
@@ -30,7 +40,6 @@ let permissoesOk = false;
 let wakeLock = null;
 
 // Audio silencioso para manter app ativo em background
-let audioSilencioso = null;
 let audioSilenciosoSource = null;
 
 // Voz Sintetizada
@@ -39,781 +48,508 @@ let vozesDisponiveis = [];
 let preferenciaTipoVoz = 'auto'; // 'auto', 'feminina', 'masculina'
 
 // ========================================
-// FUNÇÕES DE NAVEGAÇÃO
+// UTILITÁRIOS DE UI
 // ========================================
-
 function showScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById(screenId).classList.add('active');
+    const el = document.getElementById(screenId);
+    if (el) el.classList.add('active');
 }
 
-// Função para testar voz manualmente
-function testarVozManual() {
-    console.log('🎤 Teste manual de voz iniciado');
-    
-    // Garantir que vozes estão carregadas
-    if (vozesDisponiveis.length === 0) {
-        vozesDisponiveis = speechSynthesis.getVoices();
-    }
-    
-    // Vibrar para feedback
-    vibrar(200);
-    
-    // Testar sequência SEM BEEPS (só voz)
-    falarTexto('3', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
-        setTimeout(() => {
-            falarTexto('2', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
-                setTimeout(() => {
-                    falarTexto('1', { volume: 1.0, rate: 1.0, pitch: 1.0, onEnd: () => {
-                        setTimeout(() => {
-                            falarTexto('VAI!', { volume: 1.0, rate: 1.0, pitch: 1.2, onEnd: () => {
-                                setTimeout(() => {
-                                    falarTexto('CORRIDA!', { volume: 1.0, rate: 0.95, pitch: 1.1, onEnd: () => {
-                                        setTimeout(() => {
-                                            falarTexto('CAMINHADA!', { volume: 1.0, rate: 0.95, pitch: 1.1, onEnd: () => {
-                                                setTimeout(() => {
-                                                    falarTexto('PARABÉNS! Voz funcionando perfeitamente!', { volume: 1.0, rate: 0.9, pitch: 1.1 });
-                                                }, 1500);
-                                            }});
-                                        }, 1500);
-                                    }});
-                                }, 800);
-                            }});
-                        }, 1000);
-                    }});
-                }, 1000);
-            }});
-        }, 1000);
-    }});
+function formatTempoSegundos(segundos) {
+    const m = Math.floor(segundos / 60);
+    const s = segundos % 60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-// Função para atualizar voz quando usuário mudar o select
-function atualizarVoz() {
-    const seletorMenu = document.getElementById('seletorVozMenu');
-    const seletorModal = document.getElementById('seletorVoz');
-    
-    // Sincronizar os dois seletores
-    if (seletorMenu && seletorModal) {
-        preferenciaTipoVoz = seletorMenu.value;
-        seletorModal.value = preferenciaTipoVoz;
-    } else if (seletorMenu) {
-        preferenciaTipoVoz = seletorMenu.value;
-    } else if (seletorModal) {
-        preferenciaTipoVoz = seletorModal.value;
-    }
-    
-    console.log('🔄 Preferência atualizada para:', preferenciaTipoVoz);
-    
-    // FORÇAR recarregamento da voz
-    vozSelecionada = null; // Resetar voz atual
-    
-    // Recarregar vozes com nova preferência
-    carregarVozes();
-    
-    console.log('✓ Nova voz carregada:', vozSelecionada ? vozSelecionada.name : 'nenhuma');
-    
-    // Salvar preferência no localStorage
-    try {
-        localStorage.setItem('vozPreferida', preferenciaTipoVoz);
-        console.log('💾 Preferência salva:', preferenciaTipoVoz);
-    } catch (e) {
-        console.log('⚠️ Não foi possível salvar preferência');
-    }
-}
-
-// Função para sincronizar os dois seletores
-function sincronizarSeletores() {
-    const seletorMenu = document.getElementById('seletorVozMenu');
-    const seletorModal = document.getElementById('seletorVoz');
-    
-    if (seletorMenu && seletorModal) {
-        // Garantir que ambos tenham o mesmo valor
-        if (seletorMenu.value !== seletorModal.value) {
-            seletorModal.value = seletorMenu.value;
-        }
-    }
-    
-    console.log('🔄 Seletores sincronizados:', preferenciaTipoVoz);
-}
-
-// Carregar preferência salva ao iniciar
-function carregarPreferenciaVoz() {
-    try {
-        const vozSalva = localStorage.getItem('vozPreferida');
-        if (vozSalva) {
-            preferenciaTipoVoz = vozSalva;
-            
-            // Atualizar seletores
-            const seletorMenu = document.getElementById('seletorVozMenu');
-            const seletorModal = document.getElementById('seletorVoz');
-            
-            if (seletorMenu) seletorMenu.value = vozSalva;
-            if (seletorModal) seletorModal.value = vozSalva;
-            
-            console.log('✓ Preferência carregada:', vozSalva);
-        }
-    } catch (e) {
-        console.log('⚠️ Sem preferência salva');
-    }
-}
-
-function requestPermissions() {
-    // Criar AudioContext para sons
-    if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    
-    // Carregar vozes para síntese de fala
-    carregarVozes();
-    
-    // IMPORTANTE: Ativar voz com interação do usuário (iOS exige isso)
-    ativarVozComInteracao();
-    
-    // Solicitar permissão para notificações
-    solicitarPermissaoNotificacoes();
-    
-    // Solicitar Wake Lock
-    solicitarWakeLock();
-    
-    // Iniciar áudio silencioso para manter app ativo
-    iniciarAudioSilencioso();
-    
-    permissoesOk = true;
-    document.getElementById('permissionModal').classList.remove('active');
-    
-    // Testar vibração
-    if ('vibrate' in navigator) {
-        navigator.vibrate(200);
-    }
-}
-
-// Função para ativar voz com interação do usuário
-function ativarVozComInteracao() {
-    console.log('🎤 Ativando voz com interação do usuário...');
-    
-    // Carregar vozes se ainda não carregou
-    if (vozesDisponiveis.length === 0) {
-        vozesDisponiveis = speechSynthesis.getVoices();
-    }
-    
-    // Tentar falar algo muito curto para "desbloquear" a voz no iOS
-    try {
-        const utterance = new SpeechSynthesisUtterance('.');
-        utterance.volume = 0.01; // Quase mudo
-        utterance.rate = 2.0; // Muito rápido
-        
-        utterance.onend = () => {
-            console.log('✓ Voz ativada com sucesso!');
-            // Agora falar a mensagem real
-            setTimeout(() => {
-                falarTexto('Running Trainer configurado! Pronto para treinar!');
-            }, 500);
-        };
-        
-        utterance.onerror = (error) => {
-            console.error('❌ Erro ao ativar voz:', error);
-            // Tentar novamente de forma mais direta
-            setTimeout(() => {
-                falarTexto('Pronto!');
-            }, 1000);
-        };
-        
-        speechSynthesis.speak(utterance);
-    } catch (error) {
-        console.error('❌ Exceção ao ativar voz:', error);
-    }
+function ordinal(num) {
+    // Retorna "1ª", "2ª", "3ª", "4ª" - simplificação (feminino "repetição")
+    return `${num}ª`;
 }
 
 // ========================================
-// SONS
-// ========================================
-
-function tocarBeep(frequencia = 800, duracao = 0.3) {
-    if (!audioContext) return;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.value = frequencia;
-    oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duracao);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + duracao);
-}
-
-function tocarTroca() {
-    if (!audioContext) return;
-    tocarBeep(600, 0.2);
-    setTimeout(() => tocarBeep(800, 0.3), 200);
-}
-
-function tocarFinal() {
-    if (!audioContext) return;
-    tocarBeep(523, 0.2);
-    setTimeout(() => tocarBeep(659, 0.2), 250);
-    setTimeout(() => tocarBeep(784, 0.3), 500);
-}
-
-function vibrar(duracao = 200) {
-    if ('vibrate' in navigator) {
-        navigator.vibrate(duracao);
-    }
-}
-
-// Enviar notificação (faz smartwatch vibrar!)
-function enviarNotificacao(titulo, mensagem, icone = '🏃') {
-    if (!('Notification' in window)) return;
-    
-    if (Notification.permission === 'granted') {
-        new Notification(titulo, {
-            body: mensagem,
-            icon: 'icon-192.png',
-            badge: 'icon-72.png',
-            vibrate: [200, 100, 200],
-            tag: 'running-trainer',
-            requireInteraction: false
-        });
-    }
-}
-
-// Solicitar permissão para notificações
-async function solicitarPermissaoNotificacoes() {
-    if (!('Notification' in window)) {
-        console.log('Notificações não suportadas');
-        return false;
-    }
-    
-    if (Notification.permission === 'default') {
-        const permission = await Notification.requestPermission();
-        return permission === 'granted';
-    }
-    
-    return Notification.permission === 'granted';
-}
-
-// ========================================
-// VOZ SINTETIZADA
+// VOZ & SONS (mantive as funções originais, organizadas)
 // ========================================
 
 function carregarVozes() {
-    // Carregar vozes disponíveis
     vozesDisponiveis = speechSynthesis.getVoices();
-    
-    console.log(`📢 Total de vozes disponíveis: ${vozesDisponiveis.length}`);
-    
-    if (vozesDisponiveis.length === 0) {
-        console.log('⚠️ Nenhuma voz carregada ainda, tentando novamente...');
-        return;
-    }
-    
-    // Pegar preferência do usuário
+    if (vozesDisponiveis.length === 0) return; // será chamado novamente via onvoiceschanged
+
+    // obter preferência atual do select (se existir)
     const seletor = document.getElementById('seletorVoz') || document.getElementById('seletorVozMenu');
-    if (seletor) {
-        preferenciaTipoVoz = seletor.value;
-    }
-    
-    console.log('🎤 Preferência do usuário:', preferenciaTipoVoz);
-    
-    // IMPORTANTE: Sempre resetar voz antes de selecionar nova
+    if (seletor) preferenciaTipoVoz = seletor.value;
+
     vozSelecionada = null;
-    
-    // Selecionar voz baseado na preferência
+
     if (preferenciaTipoVoz === 'feminina') {
-        console.log('👩 Procurando voz FEMININA...');
-        
-        // Tentar encontrar Maria primeiro
-        vozSelecionada = vozesDisponiveis.find(voice => 
-            voice.lang === 'pt-BR' && 
-            voice.name.toLowerCase().includes('maria')
-        );
-        
-        if (!vozSelecionada) {
-            // Tentar qualquer voz feminina
-            vozSelecionada = vozesDisponiveis.find(voice => 
-                voice.lang === 'pt-BR' && 
-                (voice.name.toLowerCase().includes('female') ||
-                 voice.name.toLowerCase().includes('feminina') ||
-                 voice.name.toLowerCase().includes('luciana'))
-            );
-        }
-        
-        if (vozSelecionada) {
-            console.log('✓ Voz FEMININA selecionada:', vozSelecionada.name);
-            return;
-        } else {
-            console.log('⚠️ Voz feminina não encontrada, usando automático');
-        }
+        vozSelecionada = vozesDisponiveis.find(v => v.lang === 'pt-BR' && v.name.toLowerCase().includes('maria'))
+            || vozesDisponiveis.find(v => v.lang === 'pt-BR' && /female|feminina|luciana|brasil/i.test(v.name));
     } else if (preferenciaTipoVoz === 'masculina') {
-        console.log('👨 Procurando voz MASCULINA...');
-        
-        // Tentar encontrar Daniel primeiro
-        vozSelecionada = vozesDisponiveis.find(voice => 
-            voice.lang === 'pt-BR' && 
-            voice.name.toLowerCase().includes('daniel')
-        );
-        
-        if (!vozSelecionada) {
-            // Tentar qualquer voz masculina
-            vozSelecionada = vozesDisponiveis.find(voice => 
-                voice.lang === 'pt-BR' && 
-                (voice.name.toLowerCase().includes('male') && 
-                 !voice.name.toLowerCase().includes('female'))
-            );
-        }
-        
-        if (vozSelecionada) {
-            console.log('✓ Voz MASCULINA selecionada:', vozSelecionada.name);
-            return;
-        } else {
-            console.log('⚠️ Voz masculina não encontrada, usando automático');
-        }
+        vozSelecionada = vozesDisponiveis.find(v => v.lang === 'pt-BR' && v.name.toLowerCase().includes('daniel'))
+            || vozesDisponiveis.find(v => v.lang === 'pt-BR' && /male|masculina/i.test(v.name));
     }
-    
-    // Se chegou aqui, ou é "auto" ou não achou a preferida
-    console.log('🤖 Usando seleção AUTOMÁTICA...');
-    
-    // Tentar Google pt-BR (melhor qualidade)
-    vozSelecionada = vozesDisponiveis.find(voice => 
-        voice.lang === 'pt-BR' && voice.name.toLowerCase().includes('google')
-    );
-    
-    if (vozSelecionada) {
-        console.log('✓ Voz Google pt-BR selecionada:', vozSelecionada.name);
-        return;
+
+    if (!vozSelecionada) {
+        vozSelecionada = vozesDisponiveis.find(v => v.lang === 'pt-BR' && v.name.toLowerCase().includes('google'))
+            || vozesDisponiveis.find(v => v.lang === 'pt-BR')
+            || vozesDisponiveis[0];
     }
-    
-    // Tentar Microsoft pt-BR
-    vozSelecionada = vozesDisponiveis.find(voice => 
-        voice.lang === 'pt-BR' && voice.name.toLowerCase().includes('microsoft')
-    );
-    
-    if (vozSelecionada) {
-        console.log('✓ Voz Microsoft pt-BR selecionada:', vozSelecionada.name);
-        return;
-    }
-    
-    // Última opção: primeira voz pt-BR
-    vozSelecionada = vozesDisponiveis.find(voice => voice.lang === 'pt-BR');
-    
-    if (vozSelecionada) {
-        console.log('✓ Voz pt-BR selecionada:', vozSelecionada.name);
-    } else {
-        vozSelecionada = vozesDisponiveis[0];
-        console.log('⚠️ Usando voz padrão:', vozSelecionada ? vozSelecionada.name : 'nenhuma');
-    }
+
+    console.log('Voz selecionada:', vozSelecionada ? vozSelecionada.name : 'nenhuma');
 }
 
-// Garantir que vozes sejam carregadas
 if (typeof speechSynthesis !== 'undefined') {
-    speechSynthesis.onvoiceschanged = () => {
-        console.log('🔄 Evento onvoiceschanged disparado');
-        carregarVozes();
-    };
-    
-    // Tentar carregar imediatamente também
+    speechSynthesis.onvoiceschanged = carregarVozes;
     carregarVozes();
 }
 
 function falarTexto(texto, opcoes = {}) {
-    console.log('🗣️ Tentando falar:', texto);
-    
     if (typeof speechSynthesis === 'undefined') {
-        console.error('❌ speechSynthesis não está disponível');
+        console.error('speechSynthesis não disponível');
         return;
     }
-    
-    // CANCELAR IMEDIATAMENTE qualquer fala em andamento
+
     speechSynthesis.cancel();
-    
-    // Recarregar vozes se necessário
+
     if (vozesDisponiveis.length === 0) {
         vozesDisponiveis = speechSynthesis.getVoices();
         carregarVozes();
     }
-    
-    // Selecionar voz se ainda não selecionou
-    if (!vozSelecionada && vozesDisponiveis.length > 0) {
-        carregarVozes();
+    if (!vozSelecionada && vozesDisponiveis.length > 0) carregarVozes();
+
+    setTimeout(() => {
+        const u = new SpeechSynthesisUtterance(texto);
+        if (vozSelecionada) u.voice = vozSelecionada;
+        u.lang = 'pt-BR';
+        u.volume = opcoes.volume !== undefined ? opcoes.volume : 1.0;
+        u.rate = opcoes.rate !== undefined ? opcoes.rate : 0.95;
+        u.pitch = opcoes.pitch !== undefined ? opcoes.pitch : 1.0;
+        u.onend = () => { if (opcoes.onEnd) opcoes.onEnd(); };
+        u.onerror = (e) => console.error('Erro synth:', e);
+        speechSynthesis.speak(u);
+    }, 150);
+}
+
+function tocarBeep(f = 800, d = 0.25) {
+    if (!audioContext) return;
+    const osc = audioContext.createOscillator();
+    const g = audioContext.createGain();
+    osc.connect(g);
+    g.connect(audioContext.destination);
+    osc.frequency.value = f;
+    osc.type = 'sine';
+    g.gain.setValueAtTime(0.3, audioContext.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + d);
+    osc.start(audioContext.currentTime);
+    osc.stop(audioContext.currentTime + d);
+}
+
+function tocarTroca() {
+    if (!audioContext) return;
+    tocarBeep(600, 0.18);
+    setTimeout(() => tocarBeep(900, 0.2), 180);
+}
+
+function tocarFinal() {
+    if (!audioContext) return;
+    tocarBeep(523, 0.15);
+    setTimeout(() => tocarBeep(659, 0.15), 200);
+    setTimeout(() => tocarBeep(784, 0.22), 420);
+}
+
+function vibrar(ms = 200) {
+    if ('vibrate' in navigator) navigator.vibrate(ms);
+}
+
+function enviarNotificacao(titulo, mensagem) {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+        new Notification(titulo, { body: mensagem, icon: 'icon-192.png', tag: 'running-trainer' });
     }
-    
-    // Pequeno delay para garantir cancelamento
-    setTimeout(() => {
-        // Criar utterance
-        const utterance = new SpeechSynthesisUtterance(texto);
-        
-        // SEMPRE usar a mesma voz selecionada
-        if (vozSelecionada) {
-            utterance.voice = vozSelecionada;
-        }
-        
-        utterance.lang = 'pt-BR';
-        utterance.volume = opcoes.volume !== undefined ? opcoes.volume : 1.0;
-        utterance.rate = opcoes.rate !== undefined ? opcoes.rate : 0.95;
-        utterance.pitch = opcoes.pitch !== undefined ? opcoes.pitch : 1.0;
-        
-        utterance.onstart = () => {
-            console.log('✓ Falando:', texto, '| Voz:', vozSelecionada ? vozSelecionada.name : 'padrão');
-        };
-        
-        utterance.onerror = (event) => {
-            console.error('❌ Erro ao falar:', event.error);
-        };
-        
-        utterance.onend = () => {
-            console.log('✓ Finalizou:', texto);
-            if (opcoes.onEnd) {
-                opcoes.onEnd();
-            }
-        };
-        
-        // Falar APENAS uma vez
-        speechSynthesis.speak(utterance);
-    }, 200);
 }
 
-function falarComBeep(texto, frequenciaBeep = 1000) {
-    console.log('🔊 Falar com beep:', texto);
-    
-    // Tocar beep primeiro
-    tocarBeep(frequenciaBeep, 0.3);
-    
-    // Falar após o beep terminar (não simultâneo)
-    setTimeout(() => {
-        falarTexto(texto);
-    }, 400);
-}
-
+// ========================================
+// WAKE LOCK & AUDIO SILENCIOSO
+// ========================================
 async function solicitarWakeLock() {
     if (!('wakeLock' in navigator)) {
         console.log('Wake Lock não suportado');
         return;
     }
-    
     try {
         wakeLock = await navigator.wakeLock.request('screen');
-        console.log('✓ Wake Lock ativado - tela não desligará');
-        
-        // Reativar se a tela for bloqueada e desbloqueada
         document.addEventListener('visibilitychange', async () => {
             if (wakeLock !== null && document.visibilityState === 'visible') {
-                wakeLock = await navigator.wakeLock.request('screen');
+                try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) { /* ignore */ }
             }
         });
-    } catch (err) {
-        console.log('Wake Lock não disponível:', err);
+    } catch(e) {
+        console.log('Falha wakeLock', e);
     }
 }
-
 function liberarWakeLock() {
-    if (wakeLock !== null) {
-        wakeLock.release().then(() => {
-            wakeLock = null;
-            console.log('✓ Wake Lock liberado');
-        });
+    if (wakeLock) {
+        try { wakeLock.release().then(() => { wakeLock = null; }); } catch(e){ wakeLock = null; }
     }
 }
-
-// ========================================
-// ÁUDIO SILENCIOSO - Mantém app ativo em background
-// ========================================
 
 function iniciarAudioSilencioso() {
-    if (!audioContext) return;
-    
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
     try {
-        // Criar oscilador silencioso (volume muito baixo)
         audioSilenciosoSource = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        audioSilenciosoSource.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        // Volume muito baixo (quase inaudível)
-        gainNode.gain.value = 0.001;
-        
-        // Frequência baixa
+        const g = audioContext.createGain();
+        audioSilenciosoSource.connect(g);
+        g.connect(audioContext.destination);
+        g.gain.value = 0.0005;
         audioSilenciosoSource.frequency.value = 20;
-        
-        // Iniciar
         audioSilenciosoSource.start();
-        
-        console.log('✓ Áudio silencioso ativado - app continuará ativo em background');
-    } catch (err) {
-        console.log('Erro ao iniciar áudio silencioso:', err);
-    }
+    } catch(e) { console.log('erro iniciar audio silencioso', e); }
 }
-
 function pararAudioSilencioso() {
     if (audioSilenciosoSource) {
-        try {
-            audioSilenciosoSource.stop();
-            audioSilenciosoSource = null;
-            console.log('✓ Áudio silencioso parado');
-        } catch (err) {
-            console.log('Erro ao parar áudio silencioso:', err);
-        }
+        try { audioSilenciosoSource.stop(); } catch(e) {}
+        audioSilenciosoSource = null;
     }
 }
 
 // ========================================
-// INICIAR TREINO POR TEMPO
+// PREFERÊNCIA VOZ / INTERAÇÃO PARA iOS
 // ========================================
+function atualizarVoz() {
+    const seletorMenu = document.getElementById('seletorVozMenu');
+    const seletorModal = document.getElementById('seletorVoz');
+    if (seletorMenu && seletorModal) {
+        preferenciaTipoVoz = seletorMenu.value;
+        seletorModal.value = preferenciaTipoVoz;
+    } else if (seletorMenu) preferenciaTipoVoz = seletorMenu.value;
+    else if (seletorModal) preferenciaTipoVoz = seletorModal.value;
 
+    vozSelecionada = null;
+    carregarVozes();
+    try { localStorage.setItem('vozPreferida', preferenciaTipoVoz); } catch(e){}
+}
+
+function carregarPreferenciaVoz() {
+    try {
+        const v = localStorage.getItem('vozPreferida');
+        if (v) {
+            preferenciaTipoVoz = v;
+            const sm = document.getElementById('seletorVozMenu');
+            const sd = document.getElementById('seletorVoz');
+            if (sm) sm.value = v;
+            if (sd) sd.value = v;
+        }
+    } catch(e){}
+}
+
+function ativarVozComInteracao() {
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (vozesDisponiveis.length === 0) vozesDisponiveis = speechSynthesis.getVoices();
+    try {
+        const u = new SpeechSynthesisUtterance('.');
+        u.volume = 0.01; u.rate = 2.0;
+        u.onend = () => { setTimeout(() => falarTexto('Running Trainer configurado! Pronto para treinar!'), 400); };
+        speechSynthesis.speak(u);
+    } catch(e) { console.error(e); }
+}
+
+async function solicitarPermissaoNotificacoes() {
+    if (!('Notification' in window)) return false;
+    if (Notification.permission === 'default') {
+        const p = await Notification.requestPermission();
+        return p === 'granted';
+    }
+    return Notification.permission === 'granted';
+}
+
+function requestPermissions() {
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    carregarVozes();
+    ativarVozComInteracao();
+    solicitarPermissaoNotificacoes();
+    solicitarWakeLock();
+    iniciarAudioSilencioso();
+    permissoesOk = true;
+    const modal = document.getElementById('permissionModal');
+    if (modal) modal.classList.remove('active');
+    if ('vibrate' in navigator) navigator.vibrate(200);
+}
+
+// ========================================
+// INICIAR TREINO - coletas de inputs atualizadas
+// ========================================
 function iniciarTreinoTempo() {
-    const tempoCorrida = parseInt(document.getElementById('tempoCorrida').value) || 0;
-    const tempoCaminhada = parseInt(document.getElementById('tempoCaminhada').value) || 0;
-    const repeticoes = parseInt(document.getElementById('repeticoes').value) || 0;
-    
-    if (tempoCorrida <= 0 || repeticoes <= 0) {
-        alert('⚠️ Preencha o tempo de corrida e número de repetições!');
+    const t1 = parseFloat(document.getElementById('tempoCorrida1').value) || 0;
+    const tc = parseFloat(document.getElementById('tempoCaminhada').value) || 0;
+    const t2 = parseFloat(document.getElementById('tempoCorrida2').value) || 0;
+    const reps = parseInt(document.getElementById('repeticoes').value) || 0;
+
+    if (t1 <= 0 || reps <= 0) {
+        alert('⚠️ Preencha o 1º tempo de corrida e o número de repetições!');
         return;
     }
-    
     if (!permissoesOk) {
         document.getElementById('permissionModal').classList.add('active');
         return;
     }
-    
+
     tipoTreino = 'tempo';
-    config.tempoCorrida = tempoCorrida * 60;
-    config.tempoCaminhada = tempoCaminhada * 60;
-    config.repeticoes = repeticoes;
-    
+    config.tempoCorrida1 = Math.round(t1 * 60);
+    config.tempoCaminhada = Math.round(tc * 60);
+    config.tempoCorrida2 = Math.round(t2 * 60);
+    config.repeticoes = reps;
+
     showScreen('treinoScreen');
     iniciarContagemRegressiva();
 }
-
-// ========================================
-// INICIAR TREINO POR DISTÂNCIA
-// ========================================
 
 function iniciarTreinoDistancia() {
-    const distCorrida = parseFloat(document.getElementById('distCorrida').value) || 0;
-    const distCaminhada = parseFloat(document.getElementById('distCaminhada').value) || 0;
-    const repeticoes = parseInt(document.getElementById('repeticoesDist').value) || 0;
-    
-    if (distCorrida <= 0 || repeticoes <= 0) {
-        alert('⚠️ Preencha a distância de corrida e número de repetições!');
+    const d1 = parseFloat(document.getElementById('distCorrida1').value) || 0;
+    const dc = parseFloat(document.getElementById('distCaminhada').value) || 0;
+    const d2 = parseFloat(document.getElementById('distCorrida2').value) || 0;
+    const reps = parseInt(document.getElementById('repeticoesDist').value) || 0;
+
+    if (d1 <= 0 || reps <= 0) {
+        alert('⚠️ Preencha a 1ª distância de corrida e o número de repetições!');
         return;
     }
-    
     if (!permissoesOk) {
         document.getElementById('permissionModal').classList.add('active');
         return;
     }
-    
+
     tipoTreino = 'distancia';
-    config.distCorrida = distCorrida;
-    config.distCaminhada = distCaminhada;
-    config.repeticoes = repeticoes;
-    
+    config.distCorrida1 = d1;
+    config.distCaminhada = dc;
+    config.distCorrida2 = d2;
+    config.repeticoes = reps;
+
     showScreen('treinoScreen');
     iniciarContagemRegressiva();
 }
 
 // ========================================
-// CONTAGEM REGRESSIVA
+// CONTAGEM REGRESSIVA (3..2..1..VAI)
 // ========================================
-
 function iniciarContagemRegressiva() {
     let contador = 3;
     document.getElementById('faseAtual').textContent = contador;
     document.getElementById('infoValor').textContent = '';
     document.getElementById('repeticoesDisplay').textContent = '';
-    
-    // Beep e voz do 3
-    tocarBeep();
-    vibrar(200);
-    falarTexto('3');
-    
+
+    tocarBeep(); vibrar(200); falarTexto('3');
+
     const intervalo = setInterval(() => {
         contador--;
-        
         if (contador > 0) {
-            // Falar 2 ou 1
             document.getElementById('faseAtual').textContent = contador;
-            tocarBeep();
-            vibrar(200);
-            falarTexto(contador.toString());
+            tocarBeep(); vibrar(200); falarTexto(String(contador));
         } else if (contador === 0) {
-            // Falar VAI
             document.getElementById('faseAtual').textContent = 'VAI!';
-            tocarBeep(1000, 0.5);
-            vibrar(500);
+            tocarBeep(1000, 0.45); vibrar(400);
             falarTexto('VAI!', { pitch: 1.2 });
         } else {
-            // Parar contagem e iniciar treino
             clearInterval(intervalo);
-            setTimeout(() => {
-                iniciarTreinoReal();
-            }, 1000); // Aguarda 1 segundo após "VAI!" antes de começar
+            setTimeout(() => iniciarTreinoReal(), 900);
         }
     }, 1000);
 }
 
 // ========================================
-// TREINO REAL
+// Montar fases da repetição dependendo da config
 // ========================================
+function construirFasesDaRepeticao() {
+    const fases = [];
+    // Corrida 1 - sempre presente
+    if (tipoTreino === 'tempo') {
+        fases.push({ kind: 'corrida1', target: config.tempoCorrida1 }); // segundos
+        if (config.tempoCaminhada > 0) fases.push({ kind: 'caminhada', target: config.tempoCaminhada });
+        if (config.tempoCorrida2 > 0) fases.push({ kind: 'corrida2', target: config.tempoCorrida2 });
+    } else {
+        fases.push({ kind: 'corrida1', target: config.distCorrida1 }); // km
+        if (config.distCaminhada > 0) fases.push({ kind: 'caminhada', target: config.distCaminhada });
+        if (config.distCorrida2 > 0) fases.push({ kind: 'corrida2', target: config.distCorrida2 });
+    }
+    return fases;
+}
 
+// ========================================
+// INÍCIO DO TREINO REAL
+// ========================================
 function iniciarTreinoReal() {
     treinoAtivo = true;
+    pausado = false;
     repeticaoAtual = 1;
     repeticaoTotal = config.repeticoes;
-    fase = 'corrida';
-    
-    // Ativar Wake Lock e áudio para manter ativo
+    fasesDaRepeticao = construirFasesDaRepeticao();
+    indiceFase = 0;
+
+    // Ativar WakeLock e áudio silencioso
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
     solicitarWakeLock();
-    if (!audioSilenciosoSource) {
-        iniciarAudioSilencioso();
-    }
-    
+    if (!audioSilenciosoSource) iniciarAudioSilencioso();
+
     atualizarDisplay();
-    
-    // FALAR APENAS UMA VEZ ao iniciar a corrida
-    falarTexto('CORRIDA!');
-    
-    if (tipoTreino === 'tempo') {
-        tempoRestante = config.tempoCorrida;
-        document.getElementById('infoLabel').textContent = 'Tempo Restante';
-        intervaloTreino = setInterval(atualizarTreinoTempo, 1000);
-    } else {
-        distanciaPercorrida = 0;
-        document.getElementById('infoLabel').textContent = 'Distância Percorrida';
-        iniciarGPS();
-        intervaloTreino = setInterval(atualizarTreinoDistancia, 1000);
-    }
+
+    // Anunciar repetição antes de começar (Opção A)
+    anunciarRepeticaoEIniciarFase();
 }
 
-function atualizarDisplay() {
-    document.getElementById('faseAtual').textContent = fase === 'corrida' ? 'Corrida' : 'Caminhada';
-    document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
-    
-    const indicador = document.getElementById('indicadorFase');
-    if (fase === 'corrida') {
-        indicador.classList.remove('caminhada');
-    } else {
-        indicador.classList.add('caminhada');
-    }
+function anunciarRepeticaoEIniciarFase() {
+    // Anuncia "1ª repetição" (ou 2ª, 3ª...) ANTES de falar "CORRIDA!" e iniciar
+    const ord = ordinal(repeticaoAtual);
+    falarTexto(`${ord} repetição`, { onEnd: () => {
+        // Após anunciar repetição, anunciar fase inicial (CORRIDA!) e iniciar primeiro fase
+        iniciarFaseAtual();
+    }});
 }
 
-// ========================================
-// TREINO POR TEMPO
-// ========================================
+// função que começa a fase atual de fasesDaRepeticao[indiceFase]
+function iniciarFaseAtual() {
+    if (!treinoAtivo) return;
 
-function atualizarTreinoTempo() {
-    if (pausado) return;
-    
-    tempoRestante--;
-    
-    const minutos = Math.floor(tempoRestante / 60);
-    const segundos = tempoRestante % 60;
-    document.getElementById('infoValor').textContent = 
-        `${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
-    
-    if (tempoRestante <= 0) {
-        trocarFase();
-    }
-}
-
-function trocarFase() {
-    if (fase === 'corrida') {
-        if (config.tempoCaminhada > 0) {
-            fase = 'caminhada';
-            tempoRestante = config.tempoCaminhada;
-            
-            // Beep, vibração e voz APENAS UMA VEZ
-            tocarTroca();
-            vibrar(300);
-            
-            // Falar APENAS quando trocar
-            setTimeout(() => {
-                falarTexto('CAMINHADA!');
-            }, 400);
-            
-            atualizarDisplay();
-        } else {
-            proximaRepeticao();
-        }
-    } else {
+    if (indiceFase >= fasesDaRepeticao.length) {
+        // acabou as fases desta repetição
         proximaRepeticao();
+        return;
+    }
+
+    const f = fasesDaRepeticao[indiceFase];
+    fase = f;
+    faseDistanciaAcumulada = 0;
+
+    // Atualizar label e iniciar lógica dependendo do tipo de treino
+    if (tipoTreino === 'tempo') {
+        tempoRestante = f.target;
+        document.getElementById('infoLabel').textContent = 'Tempo Restante';
+        document.getElementById('infoValor').textContent = formatTempoSegundos(tempoRestante);
+        // anunciar fase (apenas uma vez)
+        if (f.kind === 'corrida1' || f.kind === 'corrida2') {
+            falarTexto('CORRIDA!');
+        } else if (f.kind === 'caminhada') {
+            falarTexto('CAMINHADA!');
+        }
+        // iniciar intervalo de 1s para decrementar
+        clearInterval(intervaloTreino);
+        intervaloTreino = setInterval(updateLoopTempo, 1000);
+    } else {
+        // Distância
+        document.getElementById('infoLabel').textContent = 'Distância Percorrida';
+        document.getElementById('infoValor').textContent = `${faseDistanciaAcumulada.toFixed(2)} km`;
+        // anunciar fase
+        if (f.kind === 'corrida1' || f.kind === 'corrida2') falarTexto('CORRIDA!');
+        else falarTexto('CAMINHADA!');
+        // iniciar GPS se ainda não
+        iniciarGPS();
+        // iniciar intervalo para checar (1s)
+        clearInterval(intervaloTreino);
+        intervaloTreino = setInterval(updateLoopDistancia, 1000);
+    }
+
+    atualizarDisplay();
+}
+
+function updateLoopTempo() {
+    if (pausado) return;
+    if (!fase) return;
+
+    tempoRestante = Math.max(0, tempoRestante - 1);
+    document.getElementById('infoValor').textContent = formatTempoSegundos(tempoRestante);
+
+    if (tempoRestante <= 0) {
+        // Fim da fase atual
+        tocarTroca(); vibrar(300);
+        // se houver fala de troca (CAMINHADA/CORRIDA) será feita ao iniciarFaseAtual
+        indiceFase++;
+        // iniciar próxima fase após pequeno delay para beep
+        setTimeout(() => iniciarFaseAtual(), 450);
     }
 }
 
+function updateLoopDistancia() {
+    if (pausado) return;
+    if (!fase) return;
+
+    document.getElementById('infoValor').textContent = `${faseDistanciaAcumulada.toFixed(2)} km`;
+
+    const alvo = fase.target; // em km
+    if (faseDistanciaAcumulada >= alvo) {
+        tocarTroca(); vibrar(300);
+        indiceFase++;
+        setTimeout(() => iniciarFaseAtual(), 450);
+    }
+}
+
+// ========================================
+// PROXIMA REPETIÇÃO / FINALIZAÇÃO
+// ========================================
 function proximaRepeticao() {
     if (repeticaoAtual < repeticaoTotal) {
         repeticaoAtual++;
-        fase = 'corrida';
-        
-        if (tipoTreino === 'tempo') {
-            tempoRestante = config.tempoCorrida;
-        } else {
-            distanciaPercorrida = 0;
-        }
-        
-        // Beep, vibração e voz APENAS UMA VEZ
-        tocarTroca();
-        vibrar(300);
-        
-        // Falar APENAS quando trocar para nova repetição
-        setTimeout(() => {
-            falarTexto('CORRIDA!');
-        }, 400);
-        
+        indiceFase = 0;
+        fasesDaRepeticao = construirFasesDaRepeticao();
+        // anunciar repetição (Opção A) e iniciar fase 0
+        falarTexto(`${ordinal(repeticaoAtual)} repetição`, { onEnd: () => {
+            // beep e iniciar
+            tocarTroca();
+            setTimeout(() => iniciarFaseAtual(), 300);
+        }});
         atualizarDisplay();
     } else {
         finalizarComSucesso();
     }
 }
 
-// ========================================
-// TREINO POR DISTÂNCIA
-// ========================================
+function finalizarComSucesso() {
+    limparTreino();
+    document.getElementById('faseAtual').textContent = 'Parabéns!\nMeta concluída!';
+    document.getElementById('infoValor').textContent = '🎉';
+    setTimeout(() => { tocarFinal(); vibrar(400); }, 0);
+    setTimeout(() => { tocarFinal(); vibrar(400); }, 500);
+    setTimeout(() => { tocarFinal(); vibrar(400); }, 1000);
+    setTimeout(() => {
+        falarTexto('PARABÉNS! TREINO CONCLUÍDO!', { pitch: 1.2, rate: 0.9 });
+    }, 1500);
+    enviarNotificacao('🎉 Parabéns!', 'Você concluiu o treino com sucesso!');
+    setTimeout(() => showScreen('menuScreen'), 6000);
+}
 
+// ========================================
+// GPS (DISTÂNCIA) - acumulador por fase
+// ========================================
 function iniciarGPS() {
     if (!navigator.geolocation) {
-        alert('⚠️ GPS não disponível neste dispositivo');
+        alert('⚠️ GPS não disponível');
         return;
     }
-    
-    watchId = navigator.geolocation.watchPosition(
-        atualizarLocalizacao,
-        erroGPS,
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-    );
+    if (watchId) return; // já ativo
+    ultimaLocalizacao = null;
+    watchId = navigator.geolocation.watchPosition(atualizarLocalizacao, erroGPS, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000
+    });
 }
 
 function atualizarLocalizacao(position) {
     const lat = position.coords.latitude;
     const lon = position.coords.longitude;
-    
+
     if (ultimaLocalizacao) {
-        const distancia = calcularDistancia(
-            ultimaLocalizacao.lat,
-            ultimaLocalizacao.lon,
-            lat,
-            lon
-        );
-        distanciaPercorrida += distancia;
+        const d = calcularDistancia(ultimaLocalizacao.lat, ultimaLocalizacao.lon, lat, lon); // km
+        faseDistanciaAcumulada += d;
     }
-    
     ultimaLocalizacao = { lat, lon };
+    // atualizar display (já é feito no loop)
 }
 
 function calcularDistancia(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Raio da Terra em km
+    const R = 6371; // km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon/2) * Math.sin(dLon/2);
-    
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c;
 }
@@ -823,30 +559,16 @@ function erroGPS(error) {
     document.getElementById('infoExtra').textContent = '⚠️ Erro ao acessar GPS';
 }
 
-function atualizarTreinoDistancia() {
-    if (pausado) return;
-    
-    document.getElementById('infoValor').textContent = 
-        `${distanciaPercorrida.toFixed(2)} km`;
-    
-    const distanciaAlvo = fase === 'corrida' ? config.distCorrida : config.distCaminhada;
-    
-    if (distanciaPercorrida >= distanciaAlvo) {
-        trocarFase();
-    }
-}
-
 // ========================================
-// CONTROLES
+// CONTROLES (PAUSAR, FINALIZAR, LIMPAR)
 // ========================================
-
 function pausarTreino() {
     pausado = !pausado;
     const btn = document.getElementById('btnPausar');
-    
     if (pausado) {
         btn.textContent = 'RETOMAR';
         document.getElementById('faseAtual').textContent = 'PAUSADO';
+        // pause speechSynth? não necessário
     } else {
         btn.textContent = 'PAUSAR';
         atualizarDisplay();
@@ -860,64 +582,48 @@ function finalizarTreino() {
     }
 }
 
-function finalizarComSucesso() {
-    limparTreino();
-    
-    document.getElementById('faseAtual').textContent = 'Parabéns!\nMeta concluída!';
-    document.getElementById('infoValor').textContent = '🎉';
-    
-    // 3 beeps finais
-    setTimeout(() => { tocarFinal(); vibrar(400); }, 0);
-    setTimeout(() => { tocarFinal(); vibrar(400); }, 500);
-    setTimeout(() => { tocarFinal(); vibrar(400); }, 1000);
-    
-    // Voz de parabéns
-    setTimeout(() => {
-        falarTexto('PARABÉNS! TREINO CONCLUÍDO!', { 
-            pitch: 1.2, 
-            rate: 0.9,
-            volume: 1.0 
-        });
-    }, 1500);
-    
-    // Notificação de conclusão
-    enviarNotificacao('🎉 Parabéns!', 'Você concluiu o treino com sucesso!', '🏆');
-    
-    setTimeout(() => showScreen('menuScreen'), 6000);
-}
-
 function limparTreino() {
     treinoAtivo = false;
     pausado = false;
-    
-    if (intervaloTreino) {
-        clearInterval(intervaloTreino);
-        intervaloTreino = null;
-    }
-    
-    if (watchId) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-    }
-    
-    // Liberar Wake Lock
-    liberarWakeLock();
-    
-    // Parar áudio silencioso
-    pararAudioSilencioso();
-    
+    fase = null;
+    repeticaoAtual = 0;
+    repeticaoTotal = 0;
+    fasesDaRepeticao = [];
+    indiceFase = 0;
+    tempoRestante = 0;
+    faseDistanciaAcumulada = 0;
+
+    if (intervaloTreino) { clearInterval(intervaloTreino); intervaloTreino = null; }
+    if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
     ultimaLocalizacao = null;
-    distanciaPercorrida = 0;
+
+    liberarWakeLock();
+    pararAudioSilencioso();
+    // limpar UI
+    document.getElementById('repeticoesDisplay').textContent = '0 / 0';
+    document.getElementById('infoValor').textContent = '';
+    document.getElementById('infoLabel').textContent = '';
+    document.getElementById('faseAtual').textContent = 'Preparar';
+    document.getElementById('infoExtra').textContent = '';
+}
+
+// Atualiza indicadores visuais
+function atualizarDisplay() {
+    document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
+    const faseTxt = (!fase) ? 'Preparar' : (fase.kind === 'caminhada' ? 'Caminhada' : (fase.kind === 'corrida1' ? 'Corrida' : 'Corrida 2'));
+    document.getElementById('faseAtual').textContent = faseTxt;
+    const indicador = document.getElementById('indicadorFase');
+    if (fase && fase.kind === 'caminhada') indicador.classList.add('caminhada');
+    else if (indicador) indicador.classList.remove('caminhada');
 }
 
 // ========================================
-// SERVICE WORKER (PWA)
+// SERVICE WORKER
 // ========================================
-
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
-            .then(reg => console.log('✓ Service Worker registrado'))
+            .then(() => console.log('✓ Service Worker registrado'))
             .catch(err => console.log('✗ Erro ao registrar SW:', err));
     });
 }
@@ -925,23 +631,20 @@ if ('serviceWorker' in navigator) {
 // ========================================
 // INICIALIZAÇÃO
 // ========================================
-
 window.addEventListener('load', () => {
-    console.log('🏃 Running Trainer PWA Iniciado');
-    
-    // Carregar preferência de voz salva
+    console.log('🏃 Running Trainer PWA - versão atualizada iniciada');
+
     carregarPreferenciaVoz();
-    
-    // Carregar vozes imediatamente
     carregarVozes();
-    
-    // Recarregar vozes após 1 segundo (garantia)
     setTimeout(carregarVozes, 1000);
-    
-    // Prevenir zoom
+
+    // criar AudioContext antecipadamente (necessário em alguns dispositivos)
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Prevenir zoom (tocar só se precisar)
     document.addEventListener('gesturestart', e => e.preventDefault());
-    
-    // Mostrar modal de permissões após 1 segundo
+
+    // Mostrar modal de permissões após 1s
     setTimeout(() => {
         if (!permissoesOk) {
             document.getElementById('permissionModal').classList.add('active');
