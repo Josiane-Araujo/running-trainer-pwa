@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -56,18 +56,23 @@
 
             <div class="form">
                 <div class="form-group">
-                    <label>Tempo de CORRIDA (minutos)</label>
-                    <input type="number" id="tempoCorrida" placeholder="Ex: 2" min="1">
+                    <label>1º Tempo de CORRIDA (minutos) ⭐ (obrigatório)</label>
+                    <input type="number" id="tempoCorrida1" placeholder="Ex: 20" min="1">
                 </div>
 
                 <div class="form-group">
-                    <label>Tempo de CAMINHADA (minutos)</label>
-                    <input type="number" id="tempoCaminhada" placeholder="Ex: 1 (opcional)" min="0">
+                    <label>Tempo de CAMINHADA (minutos) (opcional)</label>
+                    <input type="number" id="tempoCaminhada" placeholder="Ex: 2 (opcional)" min="0">
                 </div>
 
                 <div class="form-group">
-                    <label>Número de REPETIÇÕES</label>
-                    <input type="number" id="repeticoes" placeholder="Ex: 10" min="1">
+                    <label>2º Tempo de CORRIDA (minutos) (opcional)</label>
+                    <input type="number" id="tempoCorrida2" placeholder="Ex: 10 (opcional)" min="0">
+                </div>
+
+                <div class="form-group">
+                    <label>Número de REPETIÇÕES ⭐ (obrigatório)</label>
+                    <input type="number" id="repeticoes" placeholder="Ex: 3" min="1">
                 </div>
 
                 <button class="btn btn-success" onclick="iniciarTreinoTempo()">
@@ -87,18 +92,23 @@
 
             <div class="form">
                 <div class="form-group">
-                    <label>Distância de CORRIDA (km)</label>
-                    <input type="number" id="distCorrida" placeholder="Ex: 0.2 (200m) ou 2" step="0.1" min="0.1">
+                    <label>1ª Distância de CORRIDA (km) ⭐ (obrigatório)</label>
+                    <input type="number" id="distCorrida1" placeholder="Ex: 0.2 (200m) ou 2" step="0.01" min="0.01">
                 </div>
 
                 <div class="form-group">
-                    <label>Distância de CAMINHADA (km)</label>
-                    <input type="number" id="distCaminhada" placeholder="Ex: 0.1 (opcional)" step="0.1" min="0">
+                    <label>Distância de CAMINHADA (km) (opcional)</label>
+                    <input type="number" id="distCaminhada" placeholder="Ex: 0.1 (opcional)" step="0.01" min="0">
                 </div>
 
                 <div class="form-group">
-                    <label>Número de REPETIÇÕES</label>
-                    <input type="number" id="repeticoesDist" placeholder="Ex: 10" min="1">
+                    <label>2ª Distância de CORRIDA (km) (opcional)</label>
+                    <input type="number" id="distCorrida2" placeholder="Ex: 0.1 (opcional)" step="0.01" min="0">
+                </div>
+
+                <div class="form-group">
+                    <label>Número de REPETIÇÕES ⭐ (obrigatório)</label>
+                    <input type="number" id="repeticoesDist" placeholder="Ex: 3" min="1">
                 </div>
 
                 <p class="info-text">📍 GPS será ativado durante o treino</p>
