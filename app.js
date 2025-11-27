@@ -462,8 +462,91 @@ function iniciarTreinoReal() {
 }
 
 /* =========================
+   Iniciar a fase atual (índice indiceFase)
+   ========================= */
+function iniciarFaseAtual() {
+    console.log('🔵 iniciarFaseAtual() chamada | Rep:', repeticaoAtual, '| Fase:', indiceFase, '| Total fases:', fasesDaRepeticao.length);
+    
+    if (!treinoAtivo) treinoAtivo = true;
 
-    Iniciar a fase atual (índice indiceFase)
+    // Se fasesDaRepeticao estiver vazia (por alguma razão), reconstruir
+    if (!fasesDaRepeticao || fasesDaRepeticao.length === 0) {
+        console.log('⚠️ Reconstruindo fases (array vazio)');
+        fasesDaRepeticao = construirFasesDaRepeticao();
+    }
+
+    // Se acabou as fases da repetição atual, ir para próxima repetição (ou finalizar)
+    if (indiceFase >= fasesDaRepeticao.length) {
+        console.log('✅ Fim das fases da repetição', repeticaoAtual);
+        
+        // próxima repetição ou finalizar
+        if (repeticaoAtual < repeticaoTotal) {
+            console.log('➡️ Avançando para repetição', repeticaoAtual + 1);
+            repeticaoAtual++;
+            indiceFase = 0; // CRÍTICO: resetar ANTES de reconstruir
+            // RECONSTRUO as fases para garantir integridade (evita estado sujo)
+            fasesDaRepeticao = construirFasesDaRepeticao();
+            console.log('🔄 Fases reconstruídas:', fasesDaRepeticao.map(f => f.kind));
+            
+            document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
+            // anunciar repetição natural e iniciar fase 0
+            const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
+            falarTexto(textoRep, { onEnd: () => {
+                console.log('🎤 Anúncio da repetição concluído, iniciando fase 0');
+                setTimeout(() => iniciarFaseAtual(), 300);
+            }});
+            return;
+        } else {
+            console.log('🎉 Todas repetições concluídas!');
+            finalizarComSucesso();
+            return;
+        }
+    }
+
+    /* =========================
+   Iniciar a fase atual (índice indiceFase)
+   ========================= */
+function iniciarFaseAtual() {
+    console.log('🔵 iniciarFaseAtual() chamada | Rep:', repeticaoAtual, '| Fase:', indiceFase, '| Total fases:', fasesDaRepeticao.length);
+    
+    if (!treinoAtivo) treinoAtivo = true;
+
+    // Se fasesDaRepeticao estiver vazia (por alguma razão), reconstruir
+    if (!fasesDaRepeticao || fasesDaRepeticao.length === 0) {
+        console.log('⚠️ Reconstruindo fases (array vazio)');
+        fasesDaRepeticao = construirFasesDaRepeticao();
+    }
+
+    // Se acabou as fases da repetição atual, ir para próxima repetição (ou finalizar)
+    if (indiceFase >= fasesDaRepeticao.length) {
+        console.log('✅ Fim das fases da repetição', repeticaoAtual);
+        
+        // próxima repetição ou finalizar
+        if (repeticaoAtual < repeticaoTotal) {
+            console.log('➡️ Avançando para repetição', repeticaoAtual + 1);
+            repeticaoAtual++;
+            indiceFase = 0; // CRÍTICO: resetar ANTES de reconstruir
+            // RECONSTRUO as fases para garantir integridade (evita estado sujo)
+            fasesDaRepeticao = construirFasesDaRepeticao();
+            console.log('🔄 Fases reconstruídas:', fasesDaRepeticao.map(f => f.kind));
+            
+            document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
+            // anunciar repetição natural e iniciar fase 0
+            const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
+            falarTexto(textoRep, { onEnd: () => {
+                console.log('🎤 Anúncio da repetição concluído, iniciando fase 0');
+                setTimeout(() => iniciarFaseAtual(), 300);
+            }});
+            return;
+        } else {
+            console.log('🎉 Todas repetições concluídas!');
+            finalizarComSucesso();
+            return;
+        }
+    }
+
+    /* =========================
+   Iniciar a fase atual (índice indiceFase)
    ========================= */
 function iniciarFaseAtual() {
     console.log('🔵 iniciarFaseAtual() chamada | Rep:', repeticaoAtual, '| Fase:', indiceFase, '| Total fases:', fasesDaRepeticao.length);
@@ -566,7 +649,6 @@ function iniciarFaseAtual() {
 
     atualizarDisplay();
 }
-
 /* =========================
    Loop tempo - decrementa e checa fim de fase
    ========================= */
@@ -914,3 +996,4 @@ async function inicializarVozesIOS() {
         console.warn('inicializarVozesIOS fallback', e);
     }
 }
+
