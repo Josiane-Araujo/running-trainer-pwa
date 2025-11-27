@@ -1,39 +1,38 @@
-// app.js - Running Trainer (versão final com melhorias requisitadas)
-// Autor: HTML + CSS + Javascript (assistente)
-// Recursos implementados:
-// - 3 fases por repetição: Corrida1 (obrigatória) → Caminhada (opcional) → Corrida2 (opcional)
-// - Anúncio natural: "Iniciando primeira repetição" antes da Corrida1 (Opção A)
-// - Barra de progresso única que reinicia por fase (tempo ou distância)
-// - Teste de voz funcional nos dois lugares (menu e modal), carregamento robusto de vozes
-// - Repetições até 99 (inputs com min/max ajustados)
-// - Preservação de beeps, vibração, wake lock, audio silencioso, GPS, service worker
+// app.js - Running Trainer (versão final corrigida)
+// Implementa:
+// - motor de treino 3-fases por repetição (corrida1 -> caminhada? -> corrida2?)
+// - anúncio natural: "Iniciando primeira repetição" (antes da Corrida1) (Opção A)
+// - barra de progresso por fase (reinicia a cada fase) - tempo/distância
+// - forçar carregamento vozes iOS + testar voz no menu/modal
+// - wake lock, audio silencioso, beeps, vibração, notificações, GPS
+// - repeticoes 1..99
 
 /* =========================
-   Estado / Configuração
+   ESTADO / CONFIG
    ========================= */
 let treinoAtivo = false;
 let pausado = false;
-let tipoTreino = ''; // 'tempo' | 'distancia'
+let tipoTreino = ''; // 'tempo' ou 'distancia'
 let config = {
-    tempoCorrida1: 0, // segundos
-    tempoCaminhada: 0, // segundos
-    tempoCorrida2: 0, // seconds
-    distCorrida1: 0, // km
-    distCaminhada: 0, // km
-    distCorrida2: 0, // km
+    tempoCorrida1: 0, tempoCaminhada: 0, tempoCorrida2: 0, // segundos
+    distCorrida1: 0, distCaminhada: 0, distCorrida2: 0,    // km
     repeticoes: 0
 };
 
 let repeticaoAtual = 0;
 let repeticaoTotal = 0;
-let fasesDaRepeticao = []; // [{kind:'corrida1'|'caminhada'|'corrida2', target: number}]
+let fasesDaRepeticao = []; // array de { kind: 'corrida1'|'caminhada'|'corrida2', target: number }
 let indiceFase = 0;
+
 let tempoRestante = 0; // segundos (modo tempo)
 let faseDistanciaAcumulada = 0; // km (modo distancia)
 let intervaloTreino = null;
 let watchId = null;
+let ultimaLocalizacao = null;
 
-// Audio & Voice
+/* =========================
+   AUDIO / VOZ / SONS
+   ========================= */
 let audioContext = null;
 let audioSilenciosoSource = null;
 let wakeLock = null;
@@ -41,116 +40,117 @@ let permissoesOk = false;
 
 let vozesDisponiveis = [];
 let vozSelecionada = null;
-let preferenciaTipoVoz = 'auto'; // auto | feminina | masculina
+let preferenciaTipoVoz = 'auto'; // 'auto' | 'feminina' | 'masculina'
 
 /* =========================
-   UTILITÁRIOS
+   iOS voices helper (desbloqueio + carregamento)
    ========================= */
-function showScreen(id) {
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    const el = document.getElementById(id);
-    if (el) el.classList.add('active');
+let voices = [];
+let voicesLoaded = false;
+
+function carregarVozesIOS(force = false) {
+    return new Promise(resolve => {
+        let tentativa = 0;
+        function tentarCarregar() {
+            voices = speechSynthesis.getVoices();
+            if (voices.length > 1 || tentativa > 12 || force) {
+                voicesLoaded = true;
+                resolve(voices);
+                return;
+            }
+            tentativa++;
+            setTimeout(tentarCarregar, 200);
+        }
+        tentarCarregar();
+    });
 }
 
-function pad2(n) { return String(n).padStart(2, '0'); }
-function formatTempoSegundos(sec) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${pad2(m)}:${pad2(s)}`;
+function desbloquearVozesIOS() {
+    return new Promise(resolve => {
+        // Utterance quase silencioso para "desbloquear" vozes no iOS
+        try {
+            const u = new SpeechSynthesisUtterance(' ');
+            u.volume = 0;
+            u.rate = 2.0;
+            u.onend = () => setTimeout(resolve, 180);
+            speechSynthesis.speak(u);
+        } catch (e) {
+            // fallback
+            setTimeout(resolve, 200);
+        }
+    });
 }
 
-/* =========================
-   Conversor de número para ordinal em extenso (feminino)
-   Ex.: 1 -> "primeira", 2 -> "segunda", 11 -> "décima primeira"
-   ========================= */
-function numeroParaOrdinalExtenso(n) {
-    // suporta 1..99
-    if (n <= 0) return `${n}ª`;
-    const unidades = ['zero','primeira','segunda','terceira','quarta','quinta','sexta','sétima','oitava','nona'];
-    const especiais = {
-        10: 'décima',
-        11: 'décima primeira',
-        12: 'décima segunda',
-        13: 'décima terceira',
-        14: 'décima quarta',
-        15: 'décima quinta',
-        16: 'décima sexta',
-        17: 'décima sétima',
-        18: 'décima oitava',
-        19: 'décima nona'
-    };
-    const dezenas = {
-        2: 'vigésima', // 20 -> vigésima
-        3: 'trigésima',
-        4: 'quadragésima',
-        5: 'quinquagésima',
-        6: 'sexagésima',
-        7: 'septuagésima',
-        8: 'octogésima',
-        9: 'nonagésima'
-    };
-    if (n <= 9) return unidades[n];
-    if (n >= 10 && n <= 19) return especiais[n];
-    const d = Math.floor(n / 10);
-    const u = n % 10;
-    // 20,30,40...
-    if (u === 0) {
-        if (d === 2) return 'vigésima';
-        return dezenas[d] || `${d}ª`;
-    }
-    // ex.: 21 -> vigésima primeira
-    const dezExt = (d === 2) ? 'vigésima' : (dezenas[d] || `${d}ª`);
-    const uniExt = unidades[u];
-    return `${dezExt} ${uniExt}`;
-}
-
-/* =========================
-   VOZ / SONS
-   ========================= */
-function garantirAudioContext() {
-    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-}
-
-function carregarVozes() {
+async function inicializarVozesIOS() {
+    if (typeof speechSynthesis === 'undefined') return;
+    await desbloquearVozesIOS();
+    await carregarVozesIOS(true);
+    // mover vozes para vozesDisponiveis e chamar carregarVozes() para selecionar preferida
     vozesDisponiveis = speechSynthesis.getVoices();
-    if (!vozesDisponiveis || vozesDisponiveis.length === 0) return;
+    carregarVozes(); // função definida abaixo
+}
 
-    // Preferência do select
+/* Carrega vozes e seleciona a preferida de acordo com preferenciaTipoVoz */
+function carregarVozes() {
+    if (typeof speechSynthesis === 'undefined') return;
+    vozesDisponiveis = speechSynthesis.getVoices() || [];
+
+    // Atualiza preferencia do select se existir
     const seletor = document.getElementById('seletorVoz') || document.getElementById('seletorVozMenu');
     if (seletor) preferenciaTipoVoz = seletor.value;
 
     vozSelecionada = null;
 
     if (preferenciaTipoVoz === 'feminina') {
-        vozSelecionada = vozesDisponiveis.find(v => v.lang.startsWith('pt') && /maria|brasil|female|feminina|luciana/i.test(v.name));
+        vozSelecionada = vozesDisponiveis.find(v => v.lang && v.lang.startsWith('pt') && /maria|female|feminina|luciana|brasil/i.test(v.name));
     } else if (preferenciaTipoVoz === 'masculina') {
-        vozSelecionada = vozesDisponiveis.find(v => v.lang.startsWith('pt') && /daniel|male|masculina/i.test(v.name));
+        vozSelecionada = vozesDisponiveis.find(v => v.lang && v.lang.startsWith('pt') && /daniel|male|masculina/i.test(v.name));
     }
 
     if (!vozSelecionada) {
-        vozSelecionada = vozesDisponiveis.find(v => v.lang.startsWith('pt') && /google/i.test(v.name))
-            || vozesDisponiveis.find(v => v.lang.startsWith('pt'))
-            || vozesDisponiveis[0];
+        vozSelecionada = vozesDisponiveis.find(v => v.lang && v.lang.startsWith('pt') && /google/i.test(v.name))
+            || vozesDisponiveis.find(v => v.lang && v.lang.startsWith('pt'))
+            || vozesDisponiveis[0] || null;
     }
 
-    console.log('Voz selecionada:', vozSelecionada ? vozSelecionada.name : 'nenhuma');
-}
-if (typeof speechSynthesis !== 'undefined') {
-    speechSynthesis.onvoiceschanged = carregarVozes;
-    setTimeout(carregarVozes, 500);
+    // log
+    console.log('Vozes carregadas:', vozesDisponiveis.length, 'Voz selecionada:', vozSelecionada ? vozSelecionada.name : 'nenhuma');
 }
 
+/* speechSynthesis onvoiceschanged hookup */
+if (typeof speechSynthesis !== 'undefined') {
+    speechSynthesis.onvoiceschanged = () => {
+        carregarVozes();
+    };
+}
+
+/* Garante AudioContext */
+function garantirAudioContext() {
+    if (!audioContext) {
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.warn('AudioContext não disponível:', e);
+            audioContext = null;
+        }
+    }
+}
+
+/* FUNÇÕES DE FALA */
 function falarTexto(texto, opcoes = {}) {
     if (typeof speechSynthesis === 'undefined') {
         console.warn('speechSynthesis não disponível');
         return;
     }
 
-    // Não cancelar completamente se houver fala que queremos manter -- apenas garantir que fala atual não atrapalhe.
     try { speechSynthesis.cancel(); } catch (e) {}
 
-    if (vozesDisponiveis.length === 0) vozesDisponiveis = speechSynthesis.getVoices();
-    if (!vozSelecionada && vozesDisponiveis.length > 0) carregarVozes();
+    if (vozesDisponiveis.length === 0) {
+        vozesDisponiveis = speechSynthesis.getVoices();
+        carregarVozes();
+    } else if (!vozSelecionada) {
+        carregarVozes();
+    }
 
     setTimeout(() => {
         try {
@@ -164,11 +164,53 @@ function falarTexto(texto, opcoes = {}) {
             u.onerror = (err) => console.error('Erro TTS:', err);
             speechSynthesis.speak(u);
         } catch (err) {
-            console.error('Erro ao criar utterance:', err);
+            console.error('Erro ao falar:', err);
         }
     }, 120);
 }
 
+function falarComBeep(texto, beepFreq = 1000) {
+    tocarBeep(beepFreq, 0.25);
+    setTimeout(() => falarTexto(texto), 360);
+}
+
+/* Teste de voz (menu) */
+function testarVozManual() {
+    garantirAudioContext();
+    // recarregar vozes se necessário
+    if (vozesDisponiveis.length === 0) vozesDisponiveis = speechSynthesis.getVoices();
+    if (!vozSelecionada && vozesDisponiveis.length > 0) carregarVozes();
+
+    vibrar(150);
+    // Curta sequência para demonstrar
+    falarTexto('Três', { onEnd: () => {
+        falarTexto('Dois', { onEnd: () => {
+            falarTexto('Um', { onEnd: () => {
+                falarTexto('Iniciando teste de voz', { pitch: 1.05 });
+            }});
+        }});
+    }});
+}
+
+/* Teste de voz no modal (selecionada) */
+function testarVozSelecionada() {
+    garantirAudioContext();
+    // Atualizar preferencia com base no select do modal
+    const sd = document.getElementById('seletorVoz');
+    const sm = document.getElementById('seletorVozMenu');
+    if (sd) preferenciaTipoVoz = sd.value;
+    else if (sm) preferenciaTipoVoz = sm.value;
+
+    vozSelecionada = null;
+    carregarVozes();
+
+    vibrar(120);
+    falarTexto('Teste de voz selecionada. Está funcionando?', { rate: 1.0 });
+}
+
+/* =========================
+   SONS (beeps) e vibração
+   ========================= */
 function tocarBeep(freq = 800, dur = 0.25) {
     if (!audioContext) return;
     try {
@@ -180,13 +222,13 @@ function tocarBeep(freq = 800, dur = 0.25) {
         g.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + dur);
         osc.start(audioContext.currentTime);
         osc.stop(audioContext.currentTime + dur);
-    } catch (e) { console.error('Beep error', e); }
+    } catch (e) { console.warn('Erro tocarBeep', e); }
 }
 
 function tocarTroca() {
     if (!audioContext) return;
-    tocarBeep(600, 0.16);
-    setTimeout(() => tocarBeep(900, 0.18), 160);
+    tocarBeep(600, 0.14);
+    setTimeout(() => tocarBeep(900, 0.16), 160);
 }
 
 function tocarFinal() {
@@ -198,13 +240,6 @@ function tocarFinal() {
 
 function vibrar(ms = 200) {
     if ('vibrate' in navigator) navigator.vibrate(ms);
-}
-
-function enviarNotificacao(titulo, mensagem) {
-    if (!('Notification' in window)) return;
-    if (Notification.permission === 'granted') {
-        new Notification(titulo, { body: mensagem, icon: 'icon-192.png', tag: 'running-trainer' });
-    }
 }
 
 /* =========================
@@ -220,7 +255,7 @@ async function solicitarWakeLock() {
             }
         });
     } catch (e) {
-        console.log('WakeLock não disponível', e);
+        console.log('WakeLock não disponível:', e);
     }
 }
 function liberarWakeLock() {
@@ -228,7 +263,6 @@ function liberarWakeLock() {
         try { wakeLock.release().then(() => wakeLock = null); } catch(e) { wakeLock = null; }
     }
 }
-
 function iniciarAudioSilencioso() {
     try {
         garantirAudioContext();
@@ -248,7 +282,7 @@ function pararAudioSilencioso() {
 }
 
 /* =========================
-   Preferências de voz / botões de teste
+   Preferência voz + sincronizar selects
    ========================= */
 function atualizarVoz() {
     const sm = document.getElementById('seletorVozMenu');
@@ -261,15 +295,13 @@ function atualizarVoz() {
 
     vozSelecionada = null;
     carregarVozes();
-    try { localStorage.setItem('vozPreferida', preferenciaTipoVoz); } catch(e){}
+    try { localStorage.setItem('vozPreferida', preferenciaTipoVoz); } catch(e) {}
 }
-
 function sincronizarSeletores() {
     const sm = document.getElementById('seletorVozMenu');
     const sd = document.getElementById('seletorVoz');
     if (sm && sd && sm.value !== sd.value) sd.value = sm.value;
 }
-
 function carregarPreferenciaVoz() {
     try {
         const v = localStorage.getItem('vozPreferida');
@@ -280,87 +312,38 @@ function carregarPreferenciaVoz() {
             if (sm) sm.value = v;
             if (sd) sd.value = v;
         }
-    } catch(e){}
-}
-
-// Testar voz do menu (teste genérico)
-function testarVozManual() {
-    garantirAudioContext();
-    // Garantir vozes carregadas
-    if (vozesDisponiveis.length === 0) vozesDisponiveis = speechSynthesis.getVoices();
-    if (!vozSelecionada && vozesDisponiveis.length > 0) carregarVozes();
-
-    vibrar(150);
-    // Sequência curta para demonstrar fala
-    falarTexto('Três', { onEnd: () => {
-        falarTexto('Dois', { onEnd: () => {
-            falarTexto('Um', { onEnd: () => {
-                falarTexto('Iniciando teste de voz', { pitch: 1.05 });
-            }});
-        }});
-    }});
-}
-
-// Testar voz selecionada no modal
-function testarVozSelecionada() {
-    garantirAudioContext();
-    // Recarregar vozes/vozSelecionada baseando-se no select atual
-    const sd = document.getElementById('seletorVoz');
-    const sm = document.getElementById('seletorVozMenu');
-    if (sd) preferenciaTipoVoz = sd.value;
-    else if (sm) preferenciaTipoVoz = sm.value;
-    vozSelecionada = null;
-    carregarVozes();
-
-    vibrar(120);
-    // Mensagem mais curta para teste
-    falarTexto('Teste de voz selecionada. Está funcionando?', { onEnd: () => {
-        // nada
-    }});
+    } catch (e) {}
 }
 
 /* =========================
-   Permissões / inicialização
+   CONVERSOR NUMERO -> ORDINAL EM EXTENSO (feminino)
+   Ex: 1 -> "primeira", 2 -> "segunda", 11 -> "décima primeira"
    ========================= */
-async function solicitarPermissaoNotificacoes() {
-    if (!('Notification' in window)) return false;
-    if (Notification.permission === 'default') {
-        const p = await Notification.requestPermission();
-        return p === 'granted';
-    }
-    return Notification.permission === 'granted';
-}
-
-function ativarVozComInteracao() {
-    garantirAudioContext();
-    try {
-        const u = new SpeechSynthesisUtterance('.');
-        u.volume = 0.01; u.rate = 2.0;
-        u.onend = () => { setTimeout(() => falarTexto('Running Trainer configurado! Pronto para treinar!'), 300); };
-        speechSynthesis.speak(u);
-    } catch (e) { console.warn('ativarVozComInteracao falhou', e); }
-}
-
-function requestPermissions() {
-    garantirAudioContext();
-    carregarVozes();
-    ativarVozComInteracao();
-    solicitarPermissaoNotificacoes();
-    solicitarWakeLock();
-    iniciarAudioSilencioso();
-    permissoesOk = true;
-    const modal = document.getElementById('permissionModal');
-    if (modal) modal.classList.remove('active');
-    if ('vibrate' in navigator) navigator.vibrate(200);
+function numeroParaOrdinalExtenso(n) {
+    if (n <= 0) return `${n}ª`;
+    const unidades = ['zero','primeira','segunda','terceira','quarta','quinta','sexta','sétima','oitava','nona'];
+    const especiais = {
+        10: 'décima',11:'décima primeira',12:'décima segunda',13:'décima terceira',14:'décima quarta',
+        15:'décima quinta',16:'décima sexta',17:'décima sétima',18:'décima oitava',19:'décima nona'
+    };
+    const dezenas = {2:'vigésima',3:'trigésima',4:'quadragésima',5:'quinquagésima',6:'sexagésima',7:'septuagésima',8:'octogésima',9:'nonagésima'};
+    if (n <= 9) return unidades[n];
+    if (n >= 10 && n <= 19) return especiais[n];
+    const d = Math.floor(n / 10);
+    const u = n % 10;
+    if (u === 0) return dezenas[d] || `${d}ª`;
+    const dezExt = dezenas[d] || `${d}ª`;
+    const uniExt = unidades[u];
+    return `${dezExt} ${uniExt}`;
 }
 
 /* =========================
-   Construção das fases (por repetição)
+   MONTAR FASES POR REPETIÇÃO
+   (sempre chamada antes de iniciarTreinoReal)
    ========================= */
 function construirFasesDaRepeticao() {
     const fases = [];
     if (tipoTreino === 'tempo') {
-        // somente incluir fases com target > 0 (corrida1 é obrigatória)
         if (config.tempoCorrida1 > 0) fases.push({ kind: 'corrida1', target: config.tempoCorrida1 });
         if (config.tempoCaminhada > 0) fases.push({ kind: 'caminhada', target: config.tempoCaminhada });
         if (config.tempoCorrida2 > 0) fases.push({ kind: 'corrida2', target: config.tempoCorrida2 });
@@ -373,15 +356,15 @@ function construirFasesDaRepeticao() {
 }
 
 /* =========================
-   Iniciar treino (tempo / distância)
+   INICIAR TREINO (tempo e distância)
    ========================= */
 function iniciarTreinoTempo() {
-    const t1min = parseFloat(document.getElementById('tempoCorrida1').value) || 0;
-    const tCmin = parseFloat(document.getElementById('tempoCaminhada').value) || 0;
-    const t2min = parseFloat(document.getElementById('tempoCorrida2').value) || 0;
+    const t1 = parseFloat(document.getElementById('tempoCorrida1').value) || 0;
+    const tc = parseFloat(document.getElementById('tempoCaminhada').value) || 0;
+    const t2 = parseFloat(document.getElementById('tempoCorrida2').value) || 0;
     const reps = parseInt(document.getElementById('repeticoes').value) || 0;
 
-    if (t1min <= 0 || reps <= 0) {
+    if (t1 <= 0 || reps <= 0) {
         alert('⚠️ Preencha o 1º tempo de corrida e o número de repetições!');
         return;
     }
@@ -391,9 +374,9 @@ function iniciarTreinoTempo() {
     }
 
     tipoTreino = 'tempo';
-    config.tempoCorrida1 = Math.round(t1min * 60);
-    config.tempoCaminhada = Math.round(tCmin * 60);
-    config.tempoCorrida2 = Math.round(t2min * 60);
+    config.tempoCorrida1 = Math.round(t1 * 60);
+    config.tempoCaminhada = Math.round(tc * 60);
+    config.tempoCorrida2 = Math.round(t2 * 60);
     config.repeticoes = Math.min(Math.max(reps, 1), 99);
 
     iniciarContagemRegressiva();
@@ -402,7 +385,7 @@ function iniciarTreinoTempo() {
 
 function iniciarTreinoDistancia() {
     const d1 = parseFloat(document.getElementById('distCorrida1').value) || 0;
-    const dC = parseFloat(document.getElementById('distCaminhada').value) || 0;
+    const dc = parseFloat(document.getElementById('distCaminhada').value) || 0;
     const d2 = parseFloat(document.getElementById('distCorrida2').value) || 0;
     const reps = parseInt(document.getElementById('repeticoesDist').value) || 0;
 
@@ -417,7 +400,7 @@ function iniciarTreinoDistancia() {
 
     tipoTreino = 'distancia';
     config.distCorrida1 = d1;
-    config.distCaminhada = dC;
+    config.distCaminhada = dc;
     config.distCorrida2 = d2;
     config.repeticoes = Math.min(Math.max(reps, 1), 99);
 
@@ -426,27 +409,28 @@ function iniciarTreinoDistancia() {
 }
 
 /* =========================
-   Contagem regressiva (3..2..1..VAI)
+   CONTAGEM REGRESSIVA 3..2..1..VAI
    ========================= */
 function iniciarContagemRegressiva() {
-    let c = 3;
-    document.getElementById('faseAtual').textContent = c;
+    let contador = 3;
+    document.getElementById('faseAtual').textContent = contador;
     document.getElementById('infoValor').textContent = '';
     document.getElementById('repeticoesDisplay').textContent = '';
 
     garantirAudioContext();
-    tocarBeep(); vibrar(200); falarTexto('Três');
+    tocarBeep(); vibrar(180);
+    falarTexto('Três');
 
     const iv = setInterval(() => {
-        c--;
-        if (c > 0) {
-            document.getElementById('faseAtual').textContent = c;
-            tocarBeep(); vibrar(170);
-            falarTexto(String(c));
-        } else if (c === 0) {
+        contador--;
+        if (contador > 0) {
+            document.getElementById('faseAtual').textContent = contador;
+            tocarBeep(); vibrar(150);
+            falarTexto(String(contador));
+        } else if (contador === 0) {
             document.getElementById('faseAtual').textContent = 'VAI!';
             tocarBeep(1000, 0.45); vibrar(400);
-            falarTexto('VAI!', { pitch: 1.15 });
+            falarTexto('VAI!', { pitch: 1.12 });
         } else {
             clearInterval(iv);
             setTimeout(() => iniciarTreinoReal(), 700);
@@ -455,7 +439,7 @@ function iniciarContagemRegressiva() {
 }
 
 /* =========================
-   Início do treino real / fluxo das fases
+   INICIAR TREINO REAL (após contagem)
    ========================= */
 function iniciarTreinoReal() {
     treinoAtivo = true;
@@ -469,29 +453,42 @@ function iniciarTreinoReal() {
     solicitarWakeLock();
     if (!audioSilenciosoSource) iniciarAudioSilencioso();
 
+    document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
     atualizarDisplay();
 
-    // Anunciar repetição em voz natural antes de iniciar Corrida1 (Opção A)
+    // Anunciar repetição natural antes da corrida (Opção A)
     const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
     falarTexto(textoRep, { onEnd: () => {
-        // logo após anunciar repetição, iniciar a primeira fase
-        iniciarFaseAtual();
+        setTimeout(() => iniciarFaseAtual(), 300);
     }});
-
-    // Atualizar UI repeticoes
-    document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
 }
 
-/* Inicia a fase atual (fasesDaRepeticao[indiceFase]) */
+/* =========================
+   Iniciar a fase atual (índice indiceFase)
+   ========================= */
 function iniciarFaseAtual() {
     if (!treinoAtivo) return;
 
+    // Se acabou as fases da repetição atual, ir para próxima repetição (ou finalizar)
     if (indiceFase >= fasesDaRepeticao.length) {
-        // acabou fases -> próxima repetição
-        proximaRepeticao();
-        return;
+        // próxima repetição ou finalizar
+        if (repeticaoAtual < repeticaoTotal) {
+            repeticaoAtual++;
+            indiceFase = 0;
+            document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
+            // anunciar repetição natural e iniciar fase 0
+            const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
+            falarTexto(textoRep, { onEnd: () => {
+                setTimeout(() => iniciarFaseAtual(), 300);
+            }});
+            return;
+        } else {
+            finalizarComSucesso();
+            return;
+        }
     }
 
+    // Iniciar a fase corrente
     const f = fasesDaRepeticao[indiceFase];
     faseDistanciaAcumulada = 0;
 
@@ -500,11 +497,11 @@ function iniciarFaseAtual() {
         document.getElementById('infoLabel').textContent = 'Tempo Restante';
         document.getElementById('infoValor').textContent = formatTempoSegundos(tempoRestante);
 
-        // anunciar fase (CORRIDA/CAMINHADA)
+        // anunciar fase
         if (f.kind === 'corrida1' || f.kind === 'corrida2') falarTexto('Corrida!');
         else falarTexto('Caminhada!');
 
-        // atualizar barra e iniciar loop de tempo
+        // iniciar loop de tempo
         atualizarBarraProgresso(0, f.target, f.kind);
         clearInterval(intervaloTreino);
         intervaloTreino = setInterval(loopTempo, 1000);
@@ -513,9 +510,11 @@ function iniciarFaseAtual() {
         document.getElementById('infoLabel').textContent = 'Distância Percorrida';
         faseDistanciaAcumulada = 0;
         document.getElementById('infoValor').textContent = `${faseDistanciaAcumulada.toFixed(2)} km`;
+
         if (f.kind === 'corrida1' || f.kind === 'corrida2') falarTexto('Corrida!');
         else falarTexto('Caminhada!');
-        // iniciar GPS
+
+        // iniciar GPS e loop
         iniciarGPS();
         atualizarBarraProgresso(0, f.target, f.kind);
         clearInterval(intervaloTreino);
@@ -526,7 +525,7 @@ function iniciarFaseAtual() {
 }
 
 /* =========================
-   Loops de atualização por modo
+   Loop tempo - decrementa e checa fim de fase
    ========================= */
 function loopTempo() {
     if (pausado) return;
@@ -542,25 +541,28 @@ function loopTempo() {
     atualizarBarraProgresso(pct, alvo, fasesDaRepeticao[indiceFase].kind);
 
     if (tempoRestante <= 0) {
-        // final da fase
+        // finalizar fase atual
         tocarTroca(); vibrar(260);
         indiceFase++;
         setTimeout(() => iniciarFaseAtual(), 420);
     }
 }
 
+/* =========================
+   Loop distância - checa acumulado e finaliza fase
+   ========================= */
 function loopDistancia() {
     if (pausado) return;
     if (!treinoAtivo) return;
     if (!fasesDaRepeticao[indiceFase]) return;
 
-    // infoValor já atualizado na callback do GPS
     const alvo = fasesDaRepeticao[indiceFase].target; // em km
     const atual = faseDistanciaAcumulada;
     const pct = alvo > 0 ? Math.min(100, Math.round((atual / alvo) * 100)) : 100;
     atualizarBarraProgresso(pct, alvo, fasesDaRepeticao[indiceFase].kind);
 
     document.getElementById('infoValor').textContent = `${atual.toFixed(2)} km`;
+
     if (atual >= alvo) {
         tocarTroca(); vibrar(260);
         indiceFase++;
@@ -570,25 +572,15 @@ function loopDistancia() {
 
 /* =========================
    Próxima repetição / finalizar
+   (observação: lógica centralizada em iniciarFaseAtual)
    ========================= */
 function proximaRepeticao() {
-    if (repeticaoAtual < repeticaoTotal) {
-        repeticaoAtual++;
-        indiceFase = 0;
-        fasesDaRepeticao = construirFasesDaRepeticao();
-        document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
-
-        const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
-        falarTexto(textoRep, { onEnd: () => {
-            tocarTroca();
-            setTimeout(() => iniciarFaseAtual(), 300);
-        }});
-        atualizarDisplay();
-    } else {
-        finalizarComSucesso();
-    }
+    // função não mais necessária; uso iniciarFaseAtual para controlar fluxo
 }
 
+/* =========================
+   Finalizar com sucesso
+   ========================= */
 function finalizarComSucesso() {
     limparTreino();
     document.getElementById('faseAtual').textContent = 'Parabéns!\nMeta concluída!';
@@ -604,18 +596,15 @@ function finalizarComSucesso() {
 /* =========================
    GPS (distância)
    ========================= */
-let ultimaLocalizacao = null;
 function iniciarGPS() {
     if (!navigator.geolocation) {
         alert('⚠️ GPS não disponível neste dispositivo');
         return;
     }
-    if (watchId) return; // já rodando
+    if (watchId) return; // já ativo
     ultimaLocalizacao = null;
     watchId = navigator.geolocation.watchPosition(atualizarLocalizacao, erroGPS, {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 10000
+        enableHighAccuracy: true, maximumAge: 0, timeout: 10000
     });
 }
 
@@ -625,14 +614,13 @@ function atualizarLocalizacao(position) {
 
     if (ultimaLocalizacao) {
         const d = calcularDistancia(ultimaLocalizacao.lat, ultimaLocalizacao.lon, lat, lon); // km
-        // filtrar saltos absurdos (p.ex. >0.5km em 1s)
+        // filtrar saltos absurdos (ex.: >1km em 1s)
         if (d >= 0 && d < 1) {
             faseDistanciaAcumulada += d;
         }
     }
     ultimaLocalizacao = { lat, lon };
 
-    // atualizar display imediatamente em distance mode
     if (tipoTreino === 'distancia') {
         document.getElementById('infoValor').textContent = `${faseDistanciaAcumulada.toFixed(2)} km`;
     }
@@ -659,30 +647,26 @@ function erroGPS(error) {
    ========================= */
 function atualizarBarraProgresso(pct, alvo, kind) {
     const barra = document.getElementById('barraProgresso');
-    const esquerda = document.getElementById('progressoTextoLeft');
-    const direita = document.getElementById('progressoTextoRight');
+    const left = document.getElementById('progressoTextoLeft');
+    const right = document.getElementById('progressoTextoRight');
+    const indicador = document.getElementById('indicadorFase');
 
     if (!barra) return;
     barra.style.width = `${pct}%`;
 
-    // Atualizar cor conforme fase
-    const indicador = document.getElementById('indicadorFase');
     if (kind === 'caminhada') indicador.classList.add('caminhada');
     else indicador.classList.remove('caminhada');
 
-    esquerda.textContent = `${pct}%`;
+    left.textContent = `${pct}%`;
     if (tipoTreino === 'tempo') {
-        // ex.: 00:30 / 02:00 -> mostrar tempo decorrido/total
-        const alvoText = alvo ? formatTempoSegundos(alvo) : '--:--';
-        direita.textContent = alvoText;
+        right.textContent = alvo ? formatTempoSegundos(alvo) : '--:--';
     } else {
-        // distância
-        direita.textContent = alvo ? `${alvo.toFixed(2)} km` : '— km';
+        right.textContent = alvo ? `${alvo.toFixed(2)} km` : '— km';
     }
 }
 
 /* =========================
-   Controles: pausar / finalizar / limpar
+   CONTROLES: pausar, finalizar, limpar
    ========================= */
 function pausarTreino() {
     pausado = !pausado;
@@ -723,6 +707,7 @@ function limparTreino() {
     liberarWakeLock();
     pararAudioSilencioso();
 
+    // limpar UI
     document.getElementById('repeticoesDisplay').textContent = '0 / 0';
     document.getElementById('infoValor').textContent = '';
     document.getElementById('infoLabel').textContent = '';
@@ -732,7 +717,7 @@ function limparTreino() {
 }
 
 /* =========================
-   Atualizar indicadores visuais
+   UI atualizações
    ========================= */
 function atualizarDisplay() {
     document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
@@ -743,36 +728,114 @@ function atualizarDisplay() {
 }
 
 /* =========================
-   Service Worker
+   HELPERS utilitarios
    ========================= */
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-            .then(() => console.log('✓ Service Worker registrado'))
-            .catch(err => console.log('✗ Erro ao registrar SW:', err));
-    });
+function formatTempoSegundos(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    const el = document.getElementById(id);
+    if (el) el.classList.add('active');
 }
 
 /* =========================
-   Inicialização da página
+   Notificações
    ========================= */
-window.addEventListener('load', () => {
-    console.log('Running Trainer iniciado (versão final).');
-    carregarPreferenciaVoz();
-    carregarVozes();
-    setTimeout(carregarVozes, 800);
+async function solicitarPermissaoNotificacoes() {
+    if (!('Notification' in window)) return false;
+    if (Notification.permission === 'default') {
+        const p = await Notification.requestPermission();
+        return p === 'granted';
+    }
+    return Notification.permission === 'granted';
+}
+function enviarNotificacao(titulo, mensagem) {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+        new Notification(titulo, { body: mensagem, icon: 'icon-192.png', tag: 'running-trainer' });
+    }
+}
 
-    // Criar audioContext preventivamente (ajuda em alguns celulares)
+/* =========================
+   Inicialização da app
+   ========================= */
+window.addEventListener('load', async () => {
+    console.log('Running Trainer iniciado (corrigido).');
+
+    // carregar preferência de voz e tentar inicializar vozes (iOS-friendly)
+    carregarPreferenciaVoz();
     garantirAudioContext();
 
-    // Mostrar modal de permissões (se ainda não ativado) após 1s
+    // inicializar vozes iOS (desbloquear) e carregar vozes
+    if (typeof speechSynthesis !== 'undefined') {
+        try {
+            await inicializarVozesIOS();
+        } catch (e) {
+            console.warn('inicializarVozesIOS falhou', e);
+        }
+    }
+
+    // carregar vozes (fallback)
+    setTimeout(carregarVozes, 800);
+
+    // criar audioCtx preventivamente
+    garantirAudioContext();
+
+    // mostrar modal de permissões se necessário
     setTimeout(() => {
         if (!permissoesOk) {
             const modal = document.getElementById('permissionModal');
             if (modal) modal.classList.add('active');
         }
-    }, 1000);
+    }, 900);
 
-    // Prevenir zoom pinch no mobile
+    // registrar service worker se houver
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log('✓ Service Worker registrado'))
+            .catch(err => console.log('✗ Erro ao registrar SW:', err));
+    }
+
+    // prevenir pinch-zoom
     document.addEventListener('gesturestart', e => e.preventDefault());
 });
+
+/* =========================
+   Expor funções globais esperadas pelo HTML
+   (esses nomes já são usados no index.html)
+   ========================= */
+window.atualizarVoz = atualizarVoz;
+window.sincronizarSeletores = sincronizarSeletores;
+window.testarVozManual = testarVozManual;
+window.testarVozSelecionada = testarVozSelecionada;
+window.requestPermissions = () => {
+    garantirAudioContext();
+    carregarVozes();
+    ativarVozComInteracao();
+    solicitarPermissaoNotificacoes();
+    solicitarWakeLock();
+    iniciarAudioSilencioso();
+    permissoesOk = true;
+    const modal = document.getElementById('permissionModal');
+    if (modal) modal.classList.remove('active');
+    if ('vibrate' in navigator) navigator.vibrate(200);
+};
+window.iniciarTreinoTempo = function(){ iniciarTreinoTempo(); };
+window.iniciarTreinoDistancia = function(){ iniciarTreinoDistancia(); };
+window.pausarTreino = pausarTreino;
+window.finalizarTreino = finalizarTreino;
+
+/* Função para ativar voz via interação (iOS) */
+function ativarVozComInteracao() {
+    garantirAudioContext();
+    try {
+        const u = new SpeechSynthesisUtterance('.');
+        u.volume = 0.01; u.rate = 2.0;
+        u.onend = () => { setTimeout(() => falarTexto('Running Trainer configurado! Pronto para treinar!'), 300); };
+        speechSynthesis.speak(u);
+    } catch (e) { console.warn('ativarVozComInteracao falhou', e); }
+}
