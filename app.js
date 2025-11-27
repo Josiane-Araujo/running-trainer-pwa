@@ -464,6 +464,9 @@ function iniciarTreinoReal() {
 /* =========================
    Iniciar a fase atual (índice indiceFase)
    ========================= */
+/* =========================
+   Iniciar a fase atual (índice indiceFase)
+   ========================= */
 function iniciarFaseAtual() {
     if (!treinoAtivo) treinoAtivo = true;
 
@@ -477,9 +480,9 @@ function iniciarFaseAtual() {
         // próxima repetição ou finalizar
         if (repeticaoAtual < repeticaoTotal) {
             repeticaoAtual++;
+            indiceFase = 0; // CRÍTICO: resetar ANTES de reconstruir
             // RECONSTRUO as fases para garantir integridade (evita estado sujo)
             fasesDaRepeticao = construirFasesDaRepeticao();
-            indiceFase = 0;
             document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
             // anunciar repetição natural e iniciar fase 0
             const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
@@ -505,6 +508,12 @@ function iniciarFaseAtual() {
         return;
     }
 
+    // Limpar intervalo anterior se existir (garantir que não há múltiplos loops rodando)
+    if (intervaloTreino) { 
+        clearInterval(intervaloTreino); 
+        intervaloTreino = null; 
+    }
+
     if (tipoTreino === 'tempo') {
         tempoRestante = f.target;
         document.getElementById('infoLabel').textContent = 'Tempo Restante';
@@ -516,7 +525,6 @@ function iniciarFaseAtual() {
 
         // iniciar loop de tempo
         atualizarBarraProgresso(0, f.target, f.kind);
-        if (intervaloTreino) { clearInterval(intervaloTreino); intervaloTreino = null; }
         intervaloTreino = setInterval(loopTempo, 1000);
     } else {
         // distância
@@ -530,7 +538,6 @@ function iniciarFaseAtual() {
         // iniciar GPS e loop
         iniciarGPS();
         atualizarBarraProgresso(0, f.target, f.kind);
-        if (intervaloTreino) { clearInterval(intervaloTreino); intervaloTreino = null; }
         intervaloTreino = setInterval(loopDistancia, 1000);
     }
 
@@ -884,3 +891,4 @@ async function inicializarVozesIOS() {
         console.warn('inicializarVozesIOS fallback', e);
     }
 }
+
