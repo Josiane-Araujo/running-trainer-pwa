@@ -473,26 +473,39 @@ function iniciarFaseAtual() {
     }
 
     // Se acabou as fases da repetição atual, ir para próxima repetição (ou finalizar)
-    if (indiceFase >= fasesDaRepeticao.length) {
-        console.log('✅ Fim das fases da repetição', repeticaoAtual);
-        
-        // próxima repetição ou finalizar
-        if (repeticaoAtual < repeticaoTotal) {
-            console.log('➡️ Avançando para repetição', repeticaoAtual + 1);
-            repeticaoAtual++;
-            indiceFase = 0; // CRÍTICO: resetar ANTES de reconstruir
-            // RECONSTRUO as fases para garantir integridade (evita estado sujo)
-            fasesDaRepeticao = construirFasesDaRepeticao();
-            console.log('🔄 Fases reconstruídas:', fasesDaRepeticao.map(f => f.kind));
-            
-            document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
-            // anunciar repetição natural e iniciar fase 0
-            const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
-            falarTexto(textoRep, { onEnd: () => {
-                console.log('🎤 Anúncio da repetição concluído, iniciando fase 0');
+   if (indiceFase >= fasesDaRepeticao.length) {
+
+    // ⚠️ matar qualquer loop que ainda esteja rodando
+    if (intervaloTreino) {
+        clearInterval(intervaloTreino);
+        intervaloTreino = null;
+    }
+
+    if (repeticaoAtual < repeticaoTotal) {
+        repeticaoAtual++;
+        indiceFase = 0;
+        fasesDaRepeticao = construirFasesDaRepeticao();
+
+        document.getElementById('repeticoesDisplay').textContent =
+            `${repeticaoAtual} / ${repeticaoTotal}`;
+
+        const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
+
+        falarTexto(textoRep, {
+            onEnd: () => {
+                // garantir que NÃO há loops enquanto TTS fala
+                if (intervaloTreino) {
+                    clearInterval(intervaloTreino);
+                    intervaloTreino = null;
+                }
+
                 setTimeout(() => iniciarFaseAtual(), 300);
-            }});
-            return;
+            }
+        });
+
+        return;
+    }
+
         } else {
             console.log('🎉 Todas repetições concluídas!');
             finalizarComSucesso();
@@ -910,4 +923,5 @@ async function inicializarVozesIOS() {
         console.warn('inicializarVozesIOS fallback', e);
     }
 }
+
 
