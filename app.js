@@ -461,9 +461,6 @@ function iniciarTreinoReal() {
     }});
 }
 
-/* =========================
-   Iniciar a fase atual (índice indiceFase)
-   ========================= */
 function iniciarFaseAtual() {
     console.log('🔵 iniciarFaseAtual() chamada | Rep:', repeticaoAtual, '| Fase:', indiceFase, '| Total fases:', fasesDaRepeticao.length);
     
@@ -483,16 +480,26 @@ function iniciarFaseAtual() {
         if (repeticaoAtual < repeticaoTotal) {
             console.log('➡️ Avançando para repetição', repeticaoAtual + 1);
             repeticaoAtual++;
-            indiceFase = 0; // CRÍTICO: resetar ANTES de reconstruir
-            // RECONSTRUO as fases para garantir integridade (evita estado sujo)
+            
+            // CRÍTICO: Limpar intervalo ANTES de resetar fase
+            if (intervaloTreino) {
+                clearInterval(intervaloTreino);
+                intervaloTreino = null;
+            }
+            
+            // Resetar índice para começar do zero
+            indiceFase = 0;
+            
+            // Reconstruir fases para garantir integridade
             fasesDaRepeticao = construirFasesDaRepeticao();
             console.log('🔄 Fases reconstruídas:', fasesDaRepeticao.map(f => f.kind));
             
             document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
-            // anunciar repetição natural e iniciar fase 0
+            
+            // Anunciar repetição e iniciar fase 0
             const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
             falarTexto(textoRep, { onEnd: () => {
-                console.log('🎤 Anúncio da repetição concluído, iniciando fase 0');
+                console.log('🎤 Anúncio concluído, iniciando fase 0 da repetição', repeticaoAtual);
                 setTimeout(() => iniciarFaseAtual(), 300);
             }});
             return;
@@ -566,13 +573,83 @@ function iniciarFaseAtual() {
     atualizarDisplay();
 }
 
+    // Iniciar a fase corrente
+    const f = fasesDaRepeticao[indiceFase];
+    faseDistanciaAcumulada = 0;
+
+    if (!f) {
+        console.error('❌ Fase indefinida no indice', indiceFase, 'fasesDaRepeticao', fasesDaRepeticao);
+        // pulo para evitar loop infinito
+        indiceFase++;
+        setTimeout(() => iniciarFaseAtual(), 200);
+        return;
+    }
+
+    console.log('▶️ Iniciando fase:', f.kind, '| Target:', f.target, '| Tipo:', tipoTreino);
+
+    // Limpar intervalo anterior se existir (garantir que não há múltiplos loops rodando)
+    if (intervaloTreino) { 
+        console.log('🛑 Limpando intervalo anterior');
+        clearInterval(intervaloTreino); 
+        intervaloTreino = null; 
+    }
+
+    if (tipoTreino === 'tempo') {
+        tempoRestante = f.target;
+        document.getElementById('infoLabel').textContent = 'Tempo Restante';
+        document.getElementById('infoValor').textContent = formatTempoSegundos(tempoRestante);
+
+        // anunciar fase
+        if (f.kind === 'corrida1' || f.kind === 'corrida2') {
+            console.log('🎤 Falando: Corrida!');
+            falarTexto('Corrida!');
+        } else {
+            console.log('🎤 Falando: Caminhada!');
+            falarTexto('Caminhada!');
+        }
+
+        // iniciar loop de tempo
+        atualizarBarraProgresso(0, f.target, f.kind);
+        intervaloTreino = setInterval(loopTempo, 1000);
+        console.log('⏱️ Loop de tempo iniciado');
+    } else {
+        // distância
+        document.getElementById('infoLabel').textContent = 'Distância Percorrida';
+        faseDistanciaAcumulada = 0;
+        document.getElementById('infoValor').textContent = `${faseDistanciaAcumulada.toFixed(2)} km`;
+
+        if (f.kind === 'corrida1' || f.kind === 'corrida2') {
+            console.log('🎤 Falando: Corrida!');
+            falarTexto('Corrida!');
+        } else {
+            console.log('🎤 Falando: Caminhada!');
+            falarTexto('Caminhada!');
+        }
+
+        // iniciar GPS e loop
+        iniciarGPS();
+        atualizarBarraProgresso(0, f.target, f.kind);
+        intervaloTreino = setInterval(loopDistancia, 1000);
+        console.log('📍 Loop de distância iniciado');
+    }
+
+    atualizarDisplay();
+}
+
 /* =========================
    Loop tempo - decrementa e checa fim de fase
    ========================= */
 function loopTempo() {
     if (pausado) return;
     if (!treinoAtivo) return;
-    if (!fasesDaRepeticao[indiceFase]) return;
+    if (!fasesDaRepeticao[indiceFase]) {
+        console.log('⚠️ loopTempo: fase indefinida, limpando intervalo');
+        if (intervaloTreino) {
+            clearInterval(intervaloTreino);
+            intervaloTreino = null;
+        }
+        return;
+    }
 
     tempoRestante = Math.max(0, tempoRestante - 1);
     document.getElementById('infoValor').textContent = formatTempoSegundos(tempoRestante);
@@ -583,9 +660,21 @@ function loopTempo() {
     atualizarBarraProgresso(pct, alvo, fasesDaRepeticao[indiceFase].kind);
 
     if (tempoRestante <= 0) {
-        // finalizar fase atual
-        tocarTroca(); vibrar(260);
+        console.log('⏱️ Fase concluída:', fasesDaRepeticao[indiceFase].kind);
+        
+        // Limpar intervalo ANTES de avançar
+        if (intervaloTreino) {
+            clearInterval(intervaloTreino);
+            intervaloTreino = null;
+        }
+        
+        tocarTroca(); 
+        vibrar(260);
+        
+        // Avançar para próxima fase
         indiceFase++;
+        console.log('➡️ Avançando para indiceFase:', indiceFase);
+        
         setTimeout(() => iniciarFaseAtual(), 420);
     }
 }
@@ -596,7 +685,14 @@ function loopTempo() {
 function loopDistancia() {
     if (pausado) return;
     if (!treinoAtivo) return;
-    if (!fasesDaRepeticao[indiceFase]) return;
+    if (!fasesDaRepeticao[indiceFase]) {
+        console.log('⚠️ loopDistancia: fase indefinida, limpando intervalo');
+        if (intervaloTreino) {
+            clearInterval(intervaloTreino);
+            intervaloTreino = null;
+        }
+        return;
+    }
 
     const alvo = fasesDaRepeticao[indiceFase].target; // em km
     const atual = faseDistanciaAcumulada;
@@ -606,8 +702,21 @@ function loopDistancia() {
     document.getElementById('infoValor').textContent = `${atual.toFixed(2)} km`;
 
     if (atual >= alvo) {
-        tocarTroca(); vibrar(260);
+        console.log('📍 Fase de distância concluída:', fasesDaRepeticao[indiceFase].kind);
+        
+        // Limpar intervalo ANTES de avançar
+        if (intervaloTreino) {
+            clearInterval(intervaloTreino);
+            intervaloTreino = null;
+        }
+        
+        tocarTroca(); 
+        vibrar(260);
+        
+        // Avançar para próxima fase
         indiceFase++;
+        console.log('➡️ Avançando para indiceFase:', indiceFase);
+        
         setTimeout(() => iniciarFaseAtual(), 420);
     }
 }
@@ -913,3 +1022,4 @@ async function inicializarVozesIOS() {
         console.warn('inicializarVozesIOS fallback', e);
     }
 }
+
