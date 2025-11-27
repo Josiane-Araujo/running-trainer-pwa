@@ -1,11 +1,5 @@
-// app.js - Running Trainer (versão final corrigida)
-// Implementa:
-// - motor de treino 3-fases por repetição (corrida1 -> caminhada? -> corrida2?)
-// - anúncio natural: "Iniciando primeira repetição" (antes da Corrida1) (Opção A)
-// - barra de progresso por fase (reinicia a cada fase) - tempo/distância
-// - forçar carregamento vozes iOS + testar voz no menu/modal
-// - wake lock, audio silencioso, beeps, vibração, notificações, GPS
-// - repeticoes 1..99
+// app.js - Running Trainer (corrigido e integrado)
+// Base: seu código original com correções para repetição, exposições globais e iOS voice unlock
 
 /* =========================
    ESTADO / CONFIG
@@ -52,7 +46,7 @@ function carregarVozesIOS(force = false) {
     return new Promise(resolve => {
         let tentativa = 0;
         function tentarCarregar() {
-            voices = speechSynthesis.getVoices();
+            voices = (typeof speechSynthesis !== 'undefined') ? speechSynthesis.getVoices() : [];
             if (voices.length > 1 || tentativa > 12 || force) {
                 voicesLoaded = true;
                 resolve(voices);
@@ -67,7 +61,7 @@ function carregarVozesIOS(force = false) {
 
 function desbloquearVozesIOS() {
     return new Promise(resolve => {
-        // Utterance quase silencioso para "desbloquear" vozes no iOS
+        if (typeof speechSynthesis === 'undefined') { setTimeout(resolve, 100); return; }
         try {
             const u = new SpeechSynthesisUtterance(' ');
             u.volume = 0;
@@ -75,7 +69,6 @@ function desbloquearVozesIOS() {
             u.onend = () => setTimeout(resolve, 180);
             speechSynthesis.speak(u);
         } catch (e) {
-            // fallback
             setTimeout(resolve, 200);
         }
     });
@@ -85,9 +78,8 @@ async function inicializarVozesIOS() {
     if (typeof speechSynthesis === 'undefined') return;
     await desbloquearVozesIOS();
     await carregarVozesIOS(true);
-    // mover vozes para vozesDisponiveis e chamar carregarVozes() para selecionar preferida
-    vozesDisponiveis = speechSynthesis.getVoices();
-    carregarVozes(); // função definida abaixo
+    vozesDisponiveis = speechSynthesis.getVoices() || [];
+    carregarVozes();
 }
 
 /* Carrega vozes e seleciona a preferida de acordo com preferenciaTipoVoz */
@@ -113,7 +105,6 @@ function carregarVozes() {
             || vozesDisponiveis[0] || null;
     }
 
-    // log
     console.log('Vozes carregadas:', vozesDisponiveis.length, 'Voz selecionada:', vozSelecionada ? vozSelecionada.name : 'nenhuma');
 }
 
@@ -146,7 +137,7 @@ function falarTexto(texto, opcoes = {}) {
     try { speechSynthesis.cancel(); } catch (e) {}
 
     if (vozesDisponiveis.length === 0) {
-        vozesDisponiveis = speechSynthesis.getVoices();
+        vozesDisponiveis = speechSynthesis.getVoices() || [];
         carregarVozes();
     } else if (!vozSelecionada) {
         carregarVozes();
@@ -177,12 +168,10 @@ function falarComBeep(texto, beepFreq = 1000) {
 /* Teste de voz (menu) */
 function testarVozManual() {
     garantirAudioContext();
-    // recarregar vozes se necessário
-    if (vozesDisponiveis.length === 0) vozesDisponiveis = speechSynthesis.getVoices();
+    if (vozesDisponiveis.length === 0) vozesDisponiveis = speechSynthesis.getVoices() || [];
     if (!vozSelecionada && vozesDisponiveis.length > 0) carregarVozes();
 
     vibrar(150);
-    // Curta sequência para demonstrar
     falarTexto('Três', { onEnd: () => {
         falarTexto('Dois', { onEnd: () => {
             falarTexto('Um', { onEnd: () => {
@@ -195,7 +184,6 @@ function testarVozManual() {
 /* Teste de voz no modal (selecionada) */
 function testarVozSelecionada() {
     garantirAudioContext();
-    // Atualizar preferencia com base no select do modal
     const sd = document.getElementById('seletorVoz');
     const sm = document.getElementById('seletorVozMenu');
     if (sd) preferenciaTipoVoz = sd.value;
@@ -317,7 +305,6 @@ function carregarPreferenciaVoz() {
 
 /* =========================
    CONVERSOR NUMERO -> ORDINAL EM EXTENSO (feminino)
-   Ex: 1 -> "primeira", 2 -> "segunda", 11 -> "décima primeira"
    ========================= */
 function numeroParaOrdinalExtenso(n) {
     if (n <= 0) return `${n}ª`;
@@ -339,7 +326,6 @@ function numeroParaOrdinalExtenso(n) {
 
 /* =========================
    MONTAR FASES POR REPETIÇÃO
-   (sempre chamada antes de iniciarTreinoReal)
    ========================= */
 function construirFasesDaRepeticao() {
     const fases = [];
@@ -379,6 +365,12 @@ function iniciarTreinoTempo() {
     config.tempoCorrida2 = Math.round(t2 * 60);
     config.repeticoes = Math.min(Math.max(reps, 1), 99);
 
+    // preparar estado aqui para segurança
+    repeticaoAtual = 1;
+    repeticaoTotal = config.repeticoes;
+    fasesDaRepeticao = construirFasesDaRepeticao();
+    indiceFase = 0;
+
     iniciarContagemRegressiva();
     showScreen('treinoScreen');
 }
@@ -403,6 +395,12 @@ function iniciarTreinoDistancia() {
     config.distCaminhada = dc;
     config.distCorrida2 = d2;
     config.repeticoes = Math.min(Math.max(reps, 1), 99);
+
+    // preparar estado
+    repeticaoAtual = 1;
+    repeticaoTotal = config.repeticoes;
+    fasesDaRepeticao = construirFasesDaRepeticao();
+    indiceFase = 0;
 
     iniciarContagemRegressiva();
     showScreen('treinoScreen');
@@ -444,16 +442,16 @@ function iniciarContagemRegressiva() {
 function iniciarTreinoReal() {
     treinoAtivo = true;
     pausado = false;
-    repeticaoAtual = 1;
-    repeticaoTotal = config.repeticoes;
+
+    // garantir que fasesDaRepeticao está preenchido (reforço)
     fasesDaRepeticao = construirFasesDaRepeticao();
     indiceFase = 0;
 
+    document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
     garantirAudioContext();
     solicitarWakeLock();
     if (!audioSilenciosoSource) iniciarAudioSilencioso();
 
-    document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
     atualizarDisplay();
 
     // Anunciar repetição natural antes da corrida (Opção A)
@@ -467,13 +465,20 @@ function iniciarTreinoReal() {
    Iniciar a fase atual (índice indiceFase)
    ========================= */
 function iniciarFaseAtual() {
-    if (!treinoAtivo) return;
+    if (!treinoAtivo) treinoAtivo = true;
+
+    // Se fasesDaRepeticao estiver vazia (por alguma razão), reconstruir
+    if (!fasesDaRepeticao || fasesDaRepeticao.length === 0) {
+        fasesDaRepeticao = construirFasesDaRepeticao();
+    }
 
     // Se acabou as fases da repetição atual, ir para próxima repetição (ou finalizar)
     if (indiceFase >= fasesDaRepeticao.length) {
         // próxima repetição ou finalizar
         if (repeticaoAtual < repeticaoTotal) {
             repeticaoAtual++;
+            // RECONSTRUO as fases para garantir integridade (evita estado sujo)
+            fasesDaRepeticao = construirFasesDaRepeticao();
             indiceFase = 0;
             document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
             // anunciar repetição natural e iniciar fase 0
@@ -492,6 +497,14 @@ function iniciarFaseAtual() {
     const f = fasesDaRepeticao[indiceFase];
     faseDistanciaAcumulada = 0;
 
+    if (!f) {
+        console.warn('Fase indefinida no indice', indiceFase, 'fasesDaRepeticao', fasesDaRepeticao);
+        // pulo para evitar loop infinito
+        indiceFase++;
+        setTimeout(() => iniciarFaseAtual(), 200);
+        return;
+    }
+
     if (tipoTreino === 'tempo') {
         tempoRestante = f.target;
         document.getElementById('infoLabel').textContent = 'Tempo Restante';
@@ -503,7 +516,7 @@ function iniciarFaseAtual() {
 
         // iniciar loop de tempo
         atualizarBarraProgresso(0, f.target, f.kind);
-        clearInterval(intervaloTreino);
+        if (intervaloTreino) { clearInterval(intervaloTreino); intervaloTreino = null; }
         intervaloTreino = setInterval(loopTempo, 1000);
     } else {
         // distância
@@ -517,7 +530,7 @@ function iniciarFaseAtual() {
         // iniciar GPS e loop
         iniciarGPS();
         atualizarBarraProgresso(0, f.target, f.kind);
-        clearInterval(intervaloTreino);
+        if (intervaloTreino) { clearInterval(intervaloTreino); intervaloTreino = null; }
         intervaloTreino = setInterval(loopDistancia, 1000);
     }
 
@@ -568,14 +581,6 @@ function loopDistancia() {
         indiceFase++;
         setTimeout(() => iniciarFaseAtual(), 420);
     }
-}
-
-/* =========================
-   Próxima repetição / finalizar
-   (observação: lógica centralizada em iniciarFaseAtual)
-   ========================= */
-function proximaRepeticao() {
-    // função não mais necessária; uso iniciarFaseAtual para controlar fluxo
 }
 
 /* =========================
@@ -708,23 +713,30 @@ function limparTreino() {
     pararAudioSilencioso();
 
     // limpar UI
-    document.getElementById('repeticoesDisplay').textContent = '0 / 0';
-    document.getElementById('infoValor').textContent = '';
-    document.getElementById('infoLabel').textContent = '';
-    document.getElementById('faseAtual').textContent = 'Preparar';
+    const repDisp = document.getElementById('repeticoesDisplay');
+    if (repDisp) repDisp.textContent = '0 / 0';
+    const infoVal = document.getElementById('infoValor');
+    if (infoVal) infoVal.textContent = '';
+    const infoLbl = document.getElementById('infoLabel');
+    if (infoLbl) infoLbl.textContent = '';
+    const faseAt = document.getElementById('faseAtual');
+    if (faseAt) faseAt.textContent = 'Preparar';
     atualizarBarraProgresso(0, 0, null);
-    document.getElementById('infoExtra').textContent = '';
+    const infoExtra = document.getElementById('infoExtra');
+    if (infoExtra) infoExtra.textContent = '';
 }
 
 /* =========================
    UI atualizações
    ========================= */
 function atualizarDisplay() {
-    document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
+    const repDisp = document.getElementById('repeticoesDisplay');
+    if (repDisp) repDisp.textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
     const faseTxt = (!fasesDaRepeticao.length || !fasesDaRepeticao[indiceFase]) ? 'Preparar' :
         (fasesDaRepeticao[indiceFase].kind === 'caminhada' ? 'Caminhada' :
             (fasesDaRepeticao[indiceFase].kind === 'corrida1' ? 'Corrida' : 'Corrida 2'));
-    document.getElementById('faseAtual').textContent = faseTxt;
+    const faseAt = document.getElementById('faseAtual');
+    if (faseAt) faseAt.textContent = faseTxt;
 }
 
 /* =========================
@@ -806,7 +818,6 @@ window.addEventListener('load', async () => {
 
 /* =========================
    Expor funções globais esperadas pelo HTML
-   (esses nomes já são usados no index.html)
    ========================= */
 window.atualizarVoz = atualizarVoz;
 window.sincronizarSeletores = sincronizarSeletores;
@@ -824,8 +835,8 @@ window.requestPermissions = () => {
     if (modal) modal.classList.remove('active');
     if ('vibrate' in navigator) navigator.vibrate(200);
 };
-window.iniciarTreinoTempo = function(){ iniciarTreinoTempo(); };
-window.iniciarTreinoDistancia = function(){ iniciarTreinoDistancia(); };
+window.iniciarTreinoTempo = iniciarTreinoTempo;
+window.iniciarTreinoDistancia = iniciarTreinoDistancia;
 window.pausarTreino = pausarTreino;
 window.finalizarTreino = finalizarTreino;
 
@@ -838,4 +849,38 @@ function ativarVozComInteracao() {
         u.onend = () => { setTimeout(() => falarTexto('Running Trainer configurado! Pronto para treinar!'), 300); };
         speechSynthesis.speak(u);
     } catch (e) { console.warn('ativarVozComInteracao falhou', e); }
+}
+
+/* =========================
+   Funções auxiliares usadas no boot (implementações reutilizadas)
+   ========================= */
+
+// carregarVozesComRetry e inicializarVozesIOS são chamadas pelo boot; se não existirem, implemento aqui:
+function carregarVozesComRetry() {
+    return new Promise(resolve => {
+        let tent = 0;
+        function tentar() {
+            vozesDisponiveis = (typeof speechSynthesis !== 'undefined') ? speechSynthesis.getVoices() : [];
+            if (vozesDisponiveis.length > 1 || tent >= 10) {
+                carregarVozes();
+                resolve(vozesDisponiveis);
+                return;
+            }
+            tent++;
+            setTimeout(tentar, 200);
+        }
+        tentar();
+    });
+}
+
+// garantir que inicializarVozesIOS existe (chamado no load)
+async function inicializarVozesIOS() {
+    try {
+        await desbloquearVozesIOS();
+        await carregarVozesComRetry();
+        vozesDisponiveis = (typeof speechSynthesis !== 'undefined') ? speechSynthesis.getVoices() : [];
+        carregarVozes();
+    } catch (e) {
+        console.warn('inicializarVozesIOS fallback', e);
+    }
 }
