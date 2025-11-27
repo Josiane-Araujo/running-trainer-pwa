@@ -443,10 +443,6 @@ function iniciarTreinoReal() {
     treinoAtivo = true;
     pausado = false;
 
-    // garantir que fasesDaRepeticao está preenchido (reforço)
-    fasesDaRepeticao = construirFasesDaRepeticao();
-    indiceFase = 0;
-
     document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
     garantirAudioContext();
     solicitarWakeLock();
@@ -914,3 +910,4 @@ async function inicializarVozesIOS() {
         console.warn('inicializarVozesIOS fallback', e);
     }
 }
+
