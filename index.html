@@ -82,10 +82,10 @@
 
     <!-- Tela Treino por Tempo -->
     <div id="tempoScreen" class="screen">
-        <div class="container">
+           <div class="container">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-                <button class="btn-back btn" onclick="showScreen('menuScreen')">← Voltar</button>
-                <h2 class="screen-title">Treino por Tempo</h2>
+                <button class="btn btn-secondary" onclick="showScreen('menuScreen')">← Voltar</button>
+                <h2 style="margin:0; flex:1;">Treino por Tempo</h2>
             </div>
 
             <div class="form">
@@ -118,10 +118,10 @@
 
     <!-- Tela Treino por Distância -->
     <div id="distanciaScreen" class="screen">
-        <div class="container">
+         <div class="container">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-                <button class="btn-back btn" onclick="showScreen('menuScreen')">← Voltar</button>
-                <h2 class="screen-title">Treino por Distância</h2>
+                <button class="btn btn-secondary" onclick="showScreen('menuScreen')">← Voltar</button>
+                <h2 style="margin:0; flex:1;">Treino por Distância</h2>
             </div>
 
             <div class="form">
@@ -155,43 +155,44 @@
     </div>
 
     <!-- Tela de Treino -->
-    <div id="treinoScreen" class="screen">
-        <div class="container treino-container">
-            <div class="fase-atual" id="faseAtual">Preparar</div>
+   <!-- Tela de Treino -->
+<div id="treinoScreen" class="screen">
+    <div class="container treino-container">
+        <div class="fase-atual" id="faseAtual">Preparar</div>
 
-            <div class="info-principal">
-                <div class="info-box">
-                    <div class="info-label" id="infoLabel">Tempo Restante</div>
-                    <div class="info-valor" id="infoValor">00:00</div>
-                </div>
-
-                <div class="info-box">
-                    <div class="info-label">Repetições</div>
-                    <div class="info-valor-small" id="repeticoesDisplay">0 / 0</div>
-                </div>
+        <div class="info-principal">
+            <div class="info-box">
+                <div class="info-label" id="infoLabel">Tempo Restante</div>
+                <div class="info-valor" id="infoValor">00:00</div>
             </div>
 
-            <div class="indicador-fase" id="indicadorFase">
-                <div class="bar" id="barraProgresso" style="width:0%"></div>
+            <div class="info-box">
+                <div class="info-label">Repetições</div>
+                <div class="info-valor-small" id="repeticoesDisplay">0 / 0</div>
             </div>
-
-            <div style="width:80%; display:flex; justify-content:space-between; font-size:12px; color:#bcd;">
-                <div id="progressoTextoLeft">0%</div>
-                <div id="progressoTextoRight">Meta</div>
-            </div>
-
-            <div class="controles">
-                <button class="btn btn-warning" id="btnPausar" onclick="pausarTreino()">
-                    PAUSAR
-                </button>
-                <button class="btn btn-danger" onclick="finalizarTreino()">
-                    FINALIZAR
-                </button>
-            </div>
-
-            <div class="info-extra" id="infoExtra"></div>
         </div>
-    </div>
+
+        <div class="indicador-fase" id="indicadorFase">
+            <div class="bar" id="barraProgresso" style="width:0%"></div>
+        </div>
+
+        <div style="width:80%; display:flex; justify-content:space-between; font-size:12px; color:#bcd;">
+            <div id="progressoTextoLeft">0%</div>
+            <div id="progressoTextoRight">Meta</div>
+        </div>
+
+        <div class="controles">
+            <button class="btn btn-warning" id="btnPausar" onclick="pausarTreino()">
+                PAUSAR
+            </button>
+            <button class="btn btn-danger" onclick="finalizarTreino()">
+                FINALIZAR
+            </button>
+        </div>
+
+        <div class="info-extra" id="infoExtra"></div>
+    </div> <!-- ADICIONAR ESTE FECHAMENTO -->
+</div>
 
     <!-- Modal de Permissões -->
     <div id="permissionModal" class="modal">
@@ -236,3 +237,4 @@
     <script src="app.js"></script>
 </body>
 </html>
+
