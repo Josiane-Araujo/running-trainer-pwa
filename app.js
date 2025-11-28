@@ -713,7 +713,7 @@ function loopDistancia() {
 function finalizarComSucesso() {
     limparTreino();
     const faseAt = document.getElementById('faseAtual');
-    if (faseAt) faseAt.textContent = 'Parabéns!\nMeta concluída!';
+    if (faseAt) faseAt.textContent = 'Parabéns!\nTreino concluído!';
     const infoVal = document.getElementById('infoValor');
     if (infoVal) infoVal.textContent = '🎉';
     setTimeout(() => { tocarFinal(); vibrar(400); }, 0);
@@ -984,3 +984,4 @@ function ativarVozComInteracao() {
         speechSynthesis.speak(u);
     } catch (e) { console.warn('ativarVozComInteracao falhou', e); }
 }
+
