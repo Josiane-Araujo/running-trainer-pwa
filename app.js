@@ -957,17 +957,19 @@ window.addEventListener('load', async () => {
     document.addEventListener('gesturestart', e => e.preventDefault());
 });
 
+
 /* =========================
    Expor funções globais esperadas pelo HTML
    ========================= */
-/* =========================
-   Expor funções globais esperadas pelo HTML
-   ========================= */
+window.showScreen = showScreen;
 window.atualizarVoz = atualizarVoz;
 window.sincronizarSeletores = sincronizarSeletores;
 window.testarVozManual = testarVozManual;
 window.testarVozSelecionada = testarVozSelecionada;
-window.showScreen = showScreen; // ADICIONAR ESTA TAMBÉM
+window.iniciarTreinoTempo = iniciarTreinoTempo;
+window.iniciarTreinoDistancia = iniciarTreinoDistancia;
+window.pausarTreino = pausarTreino;
+window.finalizarTreino = finalizarTreino;
 window.requestPermissions = () => {
     garantirAudioContext();
     carregarVozes();
@@ -1029,5 +1031,6 @@ async function inicializarVozesIOS() {
         console.warn('inicializarVozesIOS fallback', e);
     }
 }
+
 
 
