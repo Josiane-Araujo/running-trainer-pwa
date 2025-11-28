@@ -466,48 +466,16 @@ function iniciarFaseAtual() {
     
     if (!treinoAtivo) treinoAtivo = true;
 
-    // Se fasesDaRepeticao estiver vazia (por alguma razão), reconstruir
+    // Se fasesDaRepeticao estiver vazia, reconstruir
     if (!fasesDaRepeticao || fasesDaRepeticao.length === 0) {
         console.log('⚠️ Reconstruindo fases (array vazio)');
         fasesDaRepeticao = construirFasesDaRepeticao();
     }
 
-    // Se acabou as fases da repetição atual, ir para próxima repetição (ou finalizar)
+    // Se acabou as fases da repetição atual, retornar (será tratado nos loops)
     if (indiceFase >= fasesDaRepeticao.length) {
         console.log('✅ Fim das fases da repetição', repeticaoAtual);
-        
-        // próxima repetição ou finalizar
-        if (repeticaoAtual < repeticaoTotal) {
-            console.log('➡️ Avançando para repetição', repeticaoAtual + 1);
-            repeticaoAtual++;
-            
-            // CRÍTICO: Limpar intervalo ANTES de resetar fase
-            if (intervaloTreino) {
-                clearInterval(intervaloTreino);
-                intervaloTreino = null;
-            }
-            
-            // Resetar índice para começar do zero
-            indiceFase = 0;
-            
-            // Reconstruir fases para garantir integridade
-            fasesDaRepeticao = construirFasesDaRepeticao();
-            console.log('🔄 Fases reconstruídas:', fasesDaRepeticao.map(f => f.kind));
-            
-            document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
-            
-            // Anunciar repetição e iniciar fase 0
-            const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
-            falarTexto(textoRep, { onEnd: () => {
-                console.log('🎤 Anúncio concluído, iniciando fase 0 da repetição', repeticaoAtual);
-                setTimeout(() => iniciarFaseAtual(), 300);
-            }});
-            return;
-        } else {
-            console.log('🎉 Todas repetições concluídas!');
-            finalizarComSucesso();
-            return;
-        }
+        return; // A lógica de avançar repetição está nos loops agora
     }
 
     // Iniciar a fase corrente
@@ -515,16 +483,13 @@ function iniciarFaseAtual() {
     faseDistanciaAcumulada = 0;
 
     if (!f) {
-        console.error('❌ Fase indefinida no indice', indiceFase, 'fasesDaRepeticao', fasesDaRepeticao);
-        // pulo para evitar loop infinito
-        indiceFase++;
-        setTimeout(() => iniciarFaseAtual(), 200);
+        console.error('❌ Fase indefinida no indice', indiceFase);
         return;
     }
 
     console.log('▶️ Iniciando fase:', f.kind, '| Target:', f.target, '| Tipo:', tipoTreino);
 
-    // Limpar intervalo anterior se existir (garantir que não há múltiplos loops rodando)
+    // Limpar intervalo anterior se existir
     if (intervaloTreino) { 
         console.log('🛑 Limpando intervalo anterior');
         clearInterval(intervaloTreino); 
@@ -675,7 +640,28 @@ function loopTempo() {
         indiceFase++;
         console.log('➡️ Avançando para indiceFase:', indiceFase);
         
-        setTimeout(() => iniciarFaseAtual(), 420);
+        // CORREÇÃO: Não chamar iniciarFaseAtual() aqui, apenas limpar
+        setTimeout(() => {
+            // Verificar se ainda há fases na repetição atual
+            if (indiceFase < fasesDaRepeticao.length) {
+                iniciarFaseAtual();
+            } else {
+                // Fim da repetição atual
+                if (repeticaoAtual < repeticaoTotal) {
+                    repeticaoAtual++;
+                    indiceFase = 0;
+                    fasesDaRepeticao = construirFasesDaRepeticao();
+                    document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
+                    
+                    const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
+                    falarTexto(textoRep, { onEnd: () => {
+                        setTimeout(() => iniciarFaseAtual(), 300);
+                    }});
+                } else {
+                    finalizarComSucesso();
+                }
+            }
+        }, 420);
     }
 }
 
@@ -694,7 +680,7 @@ function loopDistancia() {
         return;
     }
 
-    const alvo = fasesDaRepeticao[indiceFase].target; // em km
+    const alvo = fasesDaRepeticao[indiceFase].target;
     const atual = faseDistanciaAcumulada;
     const pct = alvo > 0 ? Math.min(100, Math.round((atual / alvo) * 100)) : 100;
     atualizarBarraProgresso(pct, alvo, fasesDaRepeticao[indiceFase].kind);
@@ -704,7 +690,6 @@ function loopDistancia() {
     if (atual >= alvo) {
         console.log('📍 Fase de distância concluída:', fasesDaRepeticao[indiceFase].kind);
         
-        // Limpar intervalo ANTES de avançar
         if (intervaloTreino) {
             clearInterval(intervaloTreino);
             intervaloTreino = null;
@@ -713,11 +698,29 @@ function loopDistancia() {
         tocarTroca(); 
         vibrar(260);
         
-        // Avançar para próxima fase
         indiceFase++;
-        console.log('➡️ Avançando para indiceFase:', indiceFase);
         
-        setTimeout(() => iniciarFaseAtual(), 420);
+        setTimeout(() => {
+            // Verificar se ainda há fases na repetição atual
+            if (indiceFase < fasesDaRepeticao.length) {
+                iniciarFaseAtual();
+            } else {
+                // Fim da repetição atual
+                if (repeticaoAtual < repeticaoTotal) {
+                    repeticaoAtual++;
+                    indiceFase = 0;
+                    fasesDaRepeticao = construirFasesDaRepeticao();
+                    document.getElementById('repeticoesDisplay').textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
+                    
+                    const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
+                    falarTexto(textoRep, { onEnd: () => {
+                        setTimeout(() => iniciarFaseAtual(), 300);
+                    }});
+                } else {
+                    finalizarComSucesso();
+                }
+            }
+        }, 420);
     }
 }
 
@@ -957,10 +960,14 @@ window.addEventListener('load', async () => {
 /* =========================
    Expor funções globais esperadas pelo HTML
    ========================= */
+/* =========================
+   Expor funções globais esperadas pelo HTML
+   ========================= */
 window.atualizarVoz = atualizarVoz;
 window.sincronizarSeletores = sincronizarSeletores;
 window.testarVozManual = testarVozManual;
 window.testarVozSelecionada = testarVozSelecionada;
+window.showScreen = showScreen; // ADICIONAR ESTA TAMBÉM
 window.requestPermissions = () => {
     garantirAudioContext();
     carregarVozes();
@@ -976,7 +983,7 @@ window.requestPermissions = () => {
 window.iniciarTreinoTempo = iniciarTreinoTempo;
 window.iniciarTreinoDistancia = iniciarTreinoDistancia;
 window.pausarTreino = pausarTreino;
-window.finalizarTreino = finalizarTreino;
+window.finalizarTreino = finalizarTreino; // ← ADICIONAR ESTA LINHA
 
 /* Função para ativar voz via interação (iOS) */
 function ativarVozComInteracao() {
@@ -1022,4 +1029,5 @@ async function inicializarVozesIOS() {
         console.warn('inicializarVozesIOS fallback', e);
     }
 }
+
 
