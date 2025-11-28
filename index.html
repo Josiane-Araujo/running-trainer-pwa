@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -13,7 +13,7 @@
     <style>
         /* Pequeno estilo embutido para a barra de progresso e modal */
         .treino-container { display:flex; flex-direction:column; gap:16px; align-items:center; padding: 20px; }
-        .fase-atual { font-size:22px; font-weight:700; text-align:center; }
+        .fase-atual { font-size:22px; font-weight:700; text-align:center; white-space:pre-line; }
         .info-principal { display:flex; gap:12px; width:100%; justify-content:center; }
         .info-box { background: rgba(255,255,255,0.03); padding:10px 14px; border-radius:10px; text-align:center; min-width:130px; }
         .info-label { font-size:12px; color:#ccc; }
@@ -155,7 +155,6 @@
     </div>
 
     <!-- Tela de Treino -->
-   <!-- Tela de Treino -->
 <div id="treinoScreen" class="screen">
     <div class="container treino-container">
         <div class="fase-atual" id="faseAtual">Preparar</div>
@@ -191,7 +190,7 @@
         </div>
 
         <div class="info-extra" id="infoExtra"></div>
-    </div> <!-- ADICIONAR ESTE FECHAMENTO -->
+    </div>
 </div>
 
     <!-- Modal de Permissões -->
@@ -237,4 +236,3 @@
     <script src="app.js"></script>
 </body>
 </html>
-
