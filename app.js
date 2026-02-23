@@ -1,28 +1,39 @@
-// app.js - Running Trainer (corrigido e integrado)
-// Base: seu código original com correções para repetição, exposições globais e iOS voice unlock
+// app.js - Running Trainer com Treinos Fixos, Zonas de FC e Melhorias
+// Versão Profissional com Wake Lock, Background Sync e Análises
 
 /* =========================
    ESTADO / CONFIG
    ========================= */
 let treinoAtivo = false;
 let pausado = false;
-let tipoTreino = ''; // 'tempo' ou 'distancia'
+let tipoTreino = ''; // 'tempo', 'distancia' ou 'fixo'
 let config = {
-    tempoCorrida1: 0, tempoCaminhada: 0, tempoCorrida2: 0, // segundos
-    distCorrida1: 0, distCaminhada: 0, distCorrida2: 0,    // km
+    tempoCorrida1: 0, tempoCaminhada: 0, tempoCorrida2: 0,
+    distCorrida1: 0, distCaminhada: 0, distCorrida2: 0,
     repeticoes: 0
+};
+
+// Perfil do usuário
+let perfil = {
+    nome: 'Atleta',
+    idade: 30,
+    altura: 1.75,
+    nivel: 'Iniciante' // Iniciante, Intermediário, Avançado
 };
 
 let repeticaoAtual = 0;
 let repeticaoTotal = 0;
-let fasesDaRepeticao = []; // array de { kind: 'corrida1'|'caminhada'|'corrida2', target: number }
+let fasesDaRepeticao = [];
 let indiceFase = 0;
 
-let tempoRestante = 0; // segundos (modo tempo)
-let faseDistanciaAcumulada = 0; // km (modo distancia)
+let tempoRestante = 0;
+let faseDistanciaAcumulada = 0;
 let intervaloTreino = null;
 let watchId = null;
 let ultimaLocalizacao = null;
+
+// Treino fixo selecionado
+let treinoFixoAtual = null;
 
 /* =========================
    AUDIO / VOZ / SONS
@@ -34,10 +45,10 @@ let permissoesOk = false;
 
 let vozesDisponiveis = [];
 let vozSelecionada = null;
-let preferenciaTipoVoz = 'auto'; // 'auto' | 'feminina' | 'masculina'
+let preferenciaTipoVoz = 'auto';
 
 /* =========================
-   iOS voices helper (desbloqueio + carregamento)
+   iOS voices helper
    ========================= */
 let voices = [];
 let voicesLoaded = false;
@@ -103,12 +114,10 @@ async function inicializarVozesIOS() {
     }
 }
 
-/* Carrega vozes e seleciona a preferida de acordo com preferenciaTipoVoz */
 function carregarVozes() {
     if (typeof speechSynthesis === 'undefined') return;
     vozesDisponiveis = speechSynthesis.getVoices() || [];
 
-    // Atualiza preferencia do select se existir
     const seletor = document.getElementById('seletorVoz') || document.getElementById('seletorVozMenu');
     if (seletor) preferenciaTipoVoz = seletor.value;
 
@@ -129,14 +138,12 @@ function carregarVozes() {
     console.log('Vozes carregadas:', vozesDisponiveis.length, 'Voz selecionada:', vozSelecionada ? vozSelecionada.name : 'nenhuma');
 }
 
-/* speechSynthesis onvoiceschanged hookup */
 if (typeof speechSynthesis !== 'undefined') {
     speechSynthesis.onvoiceschanged = () => {
         carregarVozes();
     };
 }
 
-/* Garante AudioContext */
 function garantirAudioContext() {
     if (!audioContext) {
         try {
@@ -186,7 +193,6 @@ function falarComBeep(texto, beepFreq = 1000) {
     setTimeout(() => falarTexto(texto), 360);
 }
 
-/* Teste de voz (menu) */
 function testarVozManual() {
     garantirAudioContext();
     if (vozesDisponiveis.length === 0) vozesDisponiveis = speechSynthesis.getVoices() || [];
@@ -202,7 +208,6 @@ function testarVozManual() {
     }});
 }
 
-/* Teste de voz no modal (selecionada) */
 function testarVozSelecionada() {
     garantirAudioContext();
     const sd = document.getElementById('seletorVoz');
@@ -217,9 +222,7 @@ function testarVozSelecionada() {
     falarTexto('Teste de voz selecionada. Está funcionando?', { rate: 1.0 });
 }
 
-/* =========================
-   SONS (beeps) e vibração
-   ========================= */
+/* SONS (beeps) e vibração */
 function tocarBeep(freq = 800, dur = 0.25) {
     if (!audioContext) return;
     try {
@@ -267,11 +270,13 @@ async function solicitarWakeLock() {
         console.log('WakeLock não disponível:', e);
     }
 }
+
 function liberarWakeLock() {
     if (wakeLock) {
         try { wakeLock.release().then(() => wakeLock = null); } catch(e) { wakeLock = null; }
     }
 }
+
 function iniciarAudioSilencioso() {
     try {
         garantirAudioContext();
@@ -283,6 +288,7 @@ function iniciarAudioSilencioso() {
         audioSilenciosoSource.start();
     } catch (e) { console.warn('audio silencioso falhou', e); }
 }
+
 function pararAudioSilencioso() {
     if (audioSilenciosoSource) {
         try { audioSilenciosoSource.stop(); } catch(e) {}
@@ -306,221 +312,239 @@ function atualizarVoz() {
     carregarVozes();
     try { localStorage.setItem('vozPreferida', preferenciaTipoVoz); } catch(e) {}
 }
+
+function carregarPreferenciaVoz() {
+    try {
+        const pref = localStorage.getItem('vozPreferida');
+        if (pref) preferenciaTipoVoz = pref;
+    } catch(e) {}
+}
+
 function sincronizarSeletores() {
     const sm = document.getElementById('seletorVozMenu');
     const sd = document.getElementById('seletorVoz');
-    if (sm && sd && sm.value !== sd.value) sd.value = sm.value;
-}
-function carregarPreferenciaVoz() {
-    try {
-        const v = localStorage.getItem('vozPreferida');
-        if (v) {
-            preferenciaTipoVoz = v;
-            const sm = document.getElementById('seletorVozMenu');
-            const sd = document.getElementById('seletorVoz');
-            if (sm) sm.value = v;
-            if (sd) sd.value = v;
-        }
-    } catch (e) {}
-}
-
-/* =========================
-   CONVERSOR NUMERO -> ORDINAL EM EXTENSO (feminino)
-   ========================= */
-function numeroParaOrdinalExtenso(n) {
-    if (n <= 0) return `${n}ª`;
-    const unidades = ['zero','primeira','segunda','terceira','quarta','quinta','sexta','sétima','oitava','nona'];
-    const especiais = {
-        10: 'décima',11:'décima primeira',12:'décima segunda',13:'décima terceira',14:'décima quarta',
-        15:'décima quinta',16:'décima sexta',17:'décima sétima',18:'décima oitava',19:'décima nona'
-    };
-    const dezenas = {2:'vigésima',3:'trigésima',4:'quadragésima',5:'quinquagésima',6:'sexagésima',7:'septuagésima',8:'octogésima',9:'nonagésima'};
-    if (n <= 9) return unidades[n];
-    if (n >= 10 && n <= 19) return especiais[n];
-    const d = Math.floor(n / 10);
-    const u = n % 10;
-    if (u === 0) return dezenas[d] || `${d}ª`;
-    const dezExt = dezenas[d] || `${d}ª`;
-    const uniExt = unidades[u];
-    return `${dezExt} ${uniExt}`;
-}
-
-/* =========================
-   MONTAR FASES POR REPETIÇÃO
-   ========================= */
-function construirFasesDaRepeticao() {
-    const fases = [];
-    if (tipoTreino === 'tempo') {
-        if (config.tempoCorrida1 > 0) fases.push({ kind: 'corrida1', target: config.tempoCorrida1 });
-        if (config.tempoCaminhada > 0) fases.push({ kind: 'caminhada', target: config.tempoCaminhada });
-        if (config.tempoCorrida2 > 0) fases.push({ kind: 'corrida2', target: config.tempoCorrida2 });
-    } else {
-        if (config.distCorrida1 > 0) fases.push({ kind: 'corrida1', target: config.distCorrida1 });
-        if (config.distCaminhada > 0) fases.push({ kind: 'caminhada', target: config.distCaminhada });
-        if (config.distCorrida2 > 0) fases.push({ kind: 'corrida2', target: config.distCorrida2 });
+    if (sm && sd) {
+        sm.value = sd.value;
+        sd.value = sm.value;
     }
+}
+
+/* =========================
+   PERFIL DO USUÁRIO
+   ========================= */
+function carregarPerfil() {
+    try {
+        const saved = localStorage.getItem('perfilUsuario');
+        if (saved) {
+            perfil = JSON.parse(saved);
+        }
+    } catch(e) {
+        console.warn('Erro ao carregar perfil:', e);
+    }
+}
+
+function salvarPerfil() {
+    try {
+        localStorage.setItem('perfilUsuario', JSON.stringify(perfil));
+    } catch(e) {
+        console.warn('Erro ao salvar perfil:', e);
+    }
+}
+
+function atualizarPerfil(nome, idade, altura, nivel) {
+    perfil = { nome, idade: parseInt(idade), altura: parseFloat(altura), nivel };
+    salvarPerfil();
+    console.log('Perfil atualizado:', perfil);
+}
+
+/* =========================
+   TREINOS FIXOS - Seleção e Inicialização
+   ========================= */
+function iniciarTreinoFixo(treinoId, semana, dia) {
+    if (!TREINOS_FIXOS[treinoId]) {
+        alert('Treino não encontrado');
+        return;
+    }
+
+    const config = converterTreinoFixo(treinoId, semana, dia);
+    if (!config) {
+        alert('Semana ou dia não disponível');
+        return;
+    }
+
+    tipoTreino = 'fixo';
+    treinoFixoAtual = config;
+    repeticaoTotal = config.repeticoes;
+    repeticaoAtual = 1;
+    indiceFase = 0;
+    fasesDaRepeticao = construirFasesDaTreinoFixo(config.blocos);
+
+    console.log('Treino fixo iniciado:', config.nome);
+    console.log('Fases:', fasesDaRepeticao);
+
+    mostrarTreinoFixo(config);
+}
+
+function construirFasesDaTreinoFixo(blocos) {
+    const fases = [];
+    blocos.forEach(bloco => {
+        let kind = 'caminhada';
+        if (bloco.tipo === 'corrida') {
+            // Se for a segunda corrida do bloco (como na semana 5A), usamos corrida2
+            kind = (bloco.repeticao === 2 && blocos.length > 2) ? 'corrida2' : 'corrida1';
+        }
+        
+        fases.push({
+            kind: kind,
+            target: bloco.tempo,
+            zona: bloco.zona,
+            tipo: bloco.tipo,
+            repeticao: bloco.repeticao
+        });
+    });
     return fases;
 }
 
+function mostrarTreinoFixo(config) {
+    showScreen('treinoScreen');
+    const faseAt = document.getElementById('faseAtual');
+    if (faseAt) faseAt.textContent = config.nome;
+    
+    const repDisplay = document.getElementById('repeticoesDisplay');
+    if (repDisplay) repDisplay.textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
+
+    treinoAtivo = true;
+    pausado = false;
+    permissoesOk = true;
+
+    solicitarWakeLock();
+    iniciarAudioSilencioso();
+    
+    setTimeout(() => iniciarFaseAtual(), 500);
+}
+
 /* =========================
-   INICIAR TREINO (tempo e distância)
+   TREINOS PERSONALIZADOS (Tempo/Distância)
    ========================= */
 function iniciarTreinoTempo() {
-    const t1 = parseFloat(document.getElementById('tempoCorrida1').value) || 0;
-    const tc = parseFloat(document.getElementById('tempoCaminhada').value) || 0;
-    const t2 = parseFloat(document.getElementById('tempoCorrida2').value) || 0;
-    const reps = parseInt(document.getElementById('repeticoes').value) || 0;
+    const tempoCorrida1 = parseInt(document.getElementById('tempoCorrida1').value) || 0;
+    const tempoCaminhada = parseInt(document.getElementById('tempoCaminhada').value) || 0;
+    const tempoCorrida2 = parseInt(document.getElementById('tempoCorrida2').value) || 0;
+    const repeticoes = parseInt(document.getElementById('repeticoes').value) || 0;
 
-    if (t1 <= 0 || reps <= 0) {
-        alert('⚠️ Preencha o 1º tempo de corrida e o número de repetições!');
-        return;
-    }
-    if (!permissoesOk) {
-        const modal = document.getElementById('permissionModal');
-        if (modal) modal.classList.add('active');
+    if (tempoCorrida1 <= 0 || repeticoes <= 0) {
+        alert('⚠️ Preencha os campos obrigatórios (tempo de corrida e repetições)');
         return;
     }
 
     tipoTreino = 'tempo';
-    config.tempoCorrida1 = Math.round(t1 * 60);
-    config.tempoCaminhada = Math.round(tc * 60);
-    config.tempoCorrida2 = Math.round(t2 * 60);
-    config.repeticoes = Math.min(Math.max(reps, 1), 99);
+    config = {
+        tempoCorrida1: tempoCorrida1 * 60,
+        tempoCaminhada: tempoCaminhada * 60,
+        tempoCorrida2: tempoCorrida2 * 60,
+        repeticoes
+    };
 
-    // preparar estado aqui para segurança
+    repeticaoTotal = repeticoes;
     repeticaoAtual = 1;
-    repeticaoTotal = config.repeticoes;
-    fasesDaRepeticao = construirFasesDaRepeticao();
     indiceFase = 0;
+    fasesDaRepeticao = construirFasesDaRepeticao();
 
-    iniciarContagemRegressiva();
+    console.log('Treino por tempo iniciado:', config);
+
     showScreen('treinoScreen');
+    treinoAtivo = true;
+    pausado = false;
+    permissoesOk = true;
+
+    solicitarWakeLock();
+    iniciarAudioSilencioso();
+
+    const repDisplay = document.getElementById('repeticoesDisplay');
+    if (repDisplay) repDisplay.textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
+
+    setTimeout(() => iniciarFaseAtual(), 500);
 }
 
 function iniciarTreinoDistancia() {
-    const d1 = parseFloat(document.getElementById('distCorrida1').value) || 0;
-    const dc = parseFloat(document.getElementById('distCaminhada').value) || 0;
-    const d2 = parseFloat(document.getElementById('distCorrida2').value) || 0;
-    const reps = parseInt(document.getElementById('repeticoesDist').value) || 0;
+    const distCorrida1 = parseFloat(document.getElementById('distCorrida1').value) || 0;
+    const distCaminhada = parseFloat(document.getElementById('distCaminhada').value) || 0;
+    const distCorrida2 = parseFloat(document.getElementById('distCorrida2').value) || 0;
+    const repeticoes = parseInt(document.getElementById('repeticoesDist').value) || 0;
 
-    if (d1 <= 0 || reps <= 0) {
-        alert('⚠️ Preencha a 1ª distância de corrida e o número de repetições!');
-        return;
-    }
-    if (!permissoesOk) {
-        const modal = document.getElementById('permissionModal');
-        if (modal) modal.classList.add('active');
+    if (distCorrida1 <= 0 || repeticoes <= 0) {
+        alert('⚠️ Preencha os campos obrigatórios (distância de corrida e repetições)');
         return;
     }
 
     tipoTreino = 'distancia';
-    config.distCorrida1 = d1;
-    config.distCaminhada = dc;
-    config.distCorrida2 = d2;
-    config.repeticoes = Math.min(Math.max(reps, 1), 99);
+    config = {
+        distCorrida1,
+        distCaminhada,
+        distCorrida2,
+        repeticoes
+    };
 
-    // preparar estado
+    repeticaoTotal = repeticoes;
     repeticaoAtual = 1;
-    repeticaoTotal = config.repeticoes;
-    fasesDaRepeticao = construirFasesDaRepeticao();
     indiceFase = 0;
+    fasesDaRepeticao = construirFasesDaRepeticao();
 
-    iniciarContagemRegressiva();
+    console.log('Treino por distância iniciado:', config);
+
     showScreen('treinoScreen');
-}
-
-/* =========================
-   CONTAGEM REGRESSIVA 3..2..1..VAI
-   ========================= */
-function iniciarContagemRegressiva() {
-    let contador = 3;
-    const faseEl = document.getElementById('faseAtual');
-    const infoValor = document.getElementById('infoValor');
-    const repDisplay = document.getElementById('repeticoesDisplay');
-
-    if (faseEl) faseEl.textContent = String(contador);
-    if (infoValor) infoValor.textContent = '';
-    if (repDisplay) repDisplay.textContent = '';
-
-    garantirAudioContext();
-    tocarBeep(); vibrar(180);
-    falarTexto('Três');
-
-    const iv = setInterval(() => {
-        contador--;
-        if (contador > 0) {
-            if (faseEl) faseEl.textContent = String(contador);
-            tocarBeep(); vibrar(150);
-            falarTexto(String(contador));
-        } else if (contador === 0) {
-            if (faseEl) faseEl.textContent = 'VAI!';
-            tocarBeep(1000, 0.45); vibrar(400);
-            falarTexto('VAI!', { pitch: 1.12 });
-        } else {
-            clearInterval(iv);
-            setTimeout(() => iniciarTreinoReal(), 700);
-        }
-    }, 1000);
-}
-
-/* =========================
-   INICIAR TREINO REAL (após contagem)
-   ========================= */
-function iniciarTreinoReal() {
     treinoAtivo = true;
     pausado = false;
+    permissoesOk = true;
 
-    // garantir que fasesDaRepeticao está preenchido (reforço)
-    fasesDaRepeticao = construirFasesDaRepeticao();
-    indiceFase = 0;
-
-    const repDisp = document.getElementById('repeticoesDisplay');
-    if (repDisp) repDisp.textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
-    garantirAudioContext();
     solicitarWakeLock();
-    if (!audioSilenciosoSource) iniciarAudioSilencioso();
+    iniciarAudioSilencioso();
 
-    atualizarDisplay();
+    const repDisplay = document.getElementById('repeticoesDisplay');
+    if (repDisplay) repDisplay.textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
 
-    // Anunciar repetição natural antes da corrida (Opção A)
-    const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
-    falarTexto(textoRecap(textoRep), { onEnd: () => {
-        setTimeout(() => iniciarFaseAtual(), 300);
-    }});
+    setTimeout(() => iniciarFaseAtual(), 500);
 }
 
-function textoRecap(texto) {
-    // pequeno wrapper pra garantir string
-    return String(texto || '');
+function construirFasesDaRepeticao() {
+    const fases = [];
+
+    if (tipoTreino === 'tempo') {
+        if (config.tempoCorrida1 > 0) fases.push({ kind: 'corrida1', target: config.tempoCorrida1 });
+        if (config.tempoCaminhada > 0) fases.push({ kind: 'caminhada', target: config.tempoCaminhada });
+        if (config.tempoCorrida2 > 0) fases.push({ kind: 'corrida2', target: config.tempoCorrida2 });
+    } else if (tipoTreino === 'distancia') {
+        if (config.distCorrida1 > 0) fases.push({ kind: 'corrida1', target: config.distCorrida1 });
+        if (config.distCaminhada > 0) fases.push({ kind: 'caminhada', target: config.distCaminhada });
+        if (config.distCorrida2 > 0) fases.push({ kind: 'corrida2', target: config.distCorrida2 });
+    }
+
+    return fases;
 }
 
 /* =========================
-   INICIAR A FASE ATUAL
+   Iniciar fase atual
    ========================= */
 function iniciarFaseAtual() {
     console.log('🔵 iniciarFaseAtual() chamada | Rep:', repeticaoAtual, '| Fase:', indiceFase, '| Total fases:', fasesDaRepeticao.length);
     
     if (!treinoAtivo) treinoAtivo = true;
 
-    // Se fasesDaRepeticao estiver vazia, reconstruir
     if (!fasesDaRepeticao || fasesDaRepeticao.length === 0) {
         console.log('⚠️ Reconstruindo fases (array vazio)');
         fasesDaRepeticao = construirFasesDaRepeticao();
     }
 
-    // Se acabou as fases da repetição atual, retornar (será tratado nos loops)
     if (indiceFase >= fasesDaRepeticao.length) {
         console.log('✅ Fim das fases da repetição', repeticaoAtual);
         return;
     }
 
-    // Iniciar a fase corrente
     const f = fasesDaRepeticao[indiceFase];
     faseDistanciaAcumulada = 0;
 
     if (!f) {
         console.error('❌ Fase indefinida no indice', indiceFase);
-        // pulo para evitar loop infinito
         indiceFase++;
         setTimeout(() => iniciarFaseAtual(), 200);
         return;
@@ -528,35 +552,54 @@ function iniciarFaseAtual() {
 
     console.log('▶️ Iniciando fase:', f.kind, '| Target:', f.target, '| Tipo:', tipoTreino);
 
-    // Limpar intervalo anterior se existir
     if (intervaloTreino) { 
         console.log('🛑 Limpando intervalo anterior');
         clearInterval(intervaloTreino); 
         intervaloTreino = null; 
     }
 
-    if (tipoTreino === 'tempo') {
+    if (tipoTreino === 'tempo' || tipoTreino === 'fixo') {
         tempoRestante = f.target;
         const infoLabel = document.getElementById('infoLabel');
         const infoValor = document.getElementById('infoValor');
         if (infoLabel) infoLabel.textContent = 'Tempo Restante';
         if (infoValor) infoValor.textContent = formatTempoSegundos(tempoRestante);
 
-        // anunciar fase
-        if (f.kind === 'corrida1' || f.kind === 'corrida2') {
-            console.log('🎤 Falando: Corrida!');
-            falarTexto('Corrida!');
+        // Anunciar fase com repetição e tipo
+        let anuncio = '';
+        const tempoVoz = formatTempoParaVoz(f.target);
+        
+        if (tipoTreino === 'fixo') {
+            // Para treinos fixos, anunciar repetição apenas no início do ciclo (Corrida 1)
+            if (f.kind === 'corrida1') {
+                anuncio = `Repetição ${repeticaoAtual}, Corrida, ${tempoVoz}`;
+            } else if (f.kind === 'corrida2') {
+                anuncio = `Corrida 2, ${tempoVoz}`;
+            } else {
+                anuncio = `Caminhada, ${tempoVoz}`;
+            }
+            
+            if (f.zona) {
+                const zonaInfo = ZONAS_FC[f.zona];
+                if (zonaInfo) anuncio += `, Zona ${f.zona}`;
+            }
         } else {
-            console.log('🎤 Falando: Caminhada!');
-            falarTexto('Caminhada!');
+            // Para treinos personalizados
+            if (indiceFase === 0) {
+                anuncio = `Repetição ${repeticaoAtual}, `;
+            }
+            
+            if (f.kind === 'corrida1') anuncio += `Corrida, ${tempoVoz}`;
+            else if (f.kind === 'corrida2') anuncio += `Corrida 2, ${tempoVoz}`;
+            else anuncio += `Caminhada, ${tempoVoz}`;
         }
+        console.log('🎤 Falando:', anuncio);
+        falarTexto(anuncio);
 
-        // iniciar loop de tempo
         atualizarBarraProgresso(0, f.target, f.kind);
         intervaloTreino = setInterval(loopTempo, 1000);
         console.log('⏱️ Loop de tempo iniciado');
-    } else {
-        // distância
+    } else if (tipoTreino === 'distancia') {
         const infoLabel = document.getElementById('infoLabel');
         const infoValor = document.getElementById('infoValor');
         if (infoLabel) infoLabel.textContent = 'Distância Percorrida';
@@ -571,7 +614,6 @@ function iniciarFaseAtual() {
             falarTexto('Caminhada!');
         }
 
-        // iniciar GPS e loop
         iniciarGPS();
         atualizarBarraProgresso(0, f.target, f.kind);
         intervaloTreino = setInterval(loopDistancia, 1000);
@@ -582,7 +624,7 @@ function iniciarFaseAtual() {
 }
 
 /* =========================
-   Loop tempo - decrementa e checa fim de fase
+   Loop tempo
    ========================= */
 function loopTempo() {
     if (pausado) return;
@@ -608,7 +650,6 @@ function loopTempo() {
     if (tempoRestante <= 0) {
         console.log('⏱️ Fase concluída:', fasesDaRepeticao[indiceFase].kind);
         
-        // Limpar intervalo ANTES de avançar
         if (intervaloTreino) {
             clearInterval(intervaloTreino);
             intervaloTreino = null;
@@ -617,27 +658,30 @@ function loopTempo() {
         tocarTroca(); 
         vibrar(260);
         
-        // Avançar para próxima fase
         indiceFase++;
         console.log('➡️ Avançando para indiceFase:', indiceFase);
         
         setTimeout(() => {
-            // Verificar se ainda há fases na repetição atual
             if (indiceFase < fasesDaRepeticao.length) {
                 iniciarFaseAtual();
             } else {
-                // Fim da repetição atual
                 if (repeticaoAtual < repeticaoTotal) {
                     repeticaoAtual++;
                     indiceFase = 0;
-                    fasesDaRepeticao = construirFasesDaRepeticao();
+                    if (tipoTreino !== 'fixo') {
+                        fasesDaRepeticao = construirFasesDaRepeticao();
+                    }
                     const repDisplay = document.getElementById('repeticoesDisplay');
                     if (repDisplay) repDisplay.textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
                     
-                    const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
-                    falarTexto(textoRep, { onEnd: () => {
-                        setTimeout(() => iniciarFaseAtual(), 300);
-                    }});
+                    if (tipoTreino !== 'fixo') {
+                        const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
+                        falarTexto(textoRep, { onEnd: () => {
+                            setTimeout(() => iniciarFaseAtual(), 300);
+                        }});
+                    } else {
+                        iniciarFaseAtual();
+                    }
                 } else {
                     finalizarComSucesso();
                 }
@@ -647,7 +691,7 @@ function loopTempo() {
 }
 
 /* =========================
-   Loop distância - checa acumulado e finaliza fase
+   Loop distância
    ========================= */
 function loopDistancia() {
     if (pausado) return;
@@ -683,22 +727,26 @@ function loopDistancia() {
         indiceFase++;
         
         setTimeout(() => {
-            // Verificar se ainda há fases na repetição atual
             if (indiceFase < fasesDaRepeticao.length) {
                 iniciarFaseAtual();
             } else {
-                // Fim da repetição atual
                 if (repeticaoAtual < repeticaoTotal) {
                     repeticaoAtual++;
                     indiceFase = 0;
-                    fasesDaRepeticao = construirFasesDaRepeticao();
+                    if (tipoTreino !== 'fixo') {
+                        fasesDaRepeticao = construirFasesDaRepeticao();
+                    }
                     const repDisplay = document.getElementById('repeticoesDisplay');
                     if (repDisplay) repDisplay.textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
                     
-                    const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
-                    falarTexto(textoRep, { onEnd: () => {
-                        setTimeout(() => iniciarFaseAtual(), 300);
-                    }});
+                    if (tipoTreino !== 'fixo') {
+                        const textoRep = `Iniciando ${numeroParaOrdinalExtenso(repeticaoAtual)} repetição`;
+                        falarTexto(textoRep, { onEnd: () => {
+                            setTimeout(() => iniciarFaseAtual(), 300);
+                        }});
+                    } else {
+                        iniciarFaseAtual();
+                    }
                 } else {
                     finalizarComSucesso();
                 }
@@ -732,7 +780,7 @@ function iniciarGPS() {
         alert('⚠️ GPS não disponível neste dispositivo');
         return;
     }
-    if (watchId) return; // já ativo
+    if (watchId) return;
     ultimaLocalizacao = null;
     watchId = navigator.geolocation.watchPosition(atualizarLocalizacao, erroGPS, {
         enableHighAccuracy: true, maximumAge: 0, timeout: 10000
@@ -744,8 +792,7 @@ function atualizarLocalizacao(position) {
     const lon = position.coords.longitude;
 
     if (ultimaLocalizacao) {
-        const d = calcularDistancia(ultimaLocalizacao.lat, ultimaLocalizacao.lon, lat, lon); // km
-        // filtrar saltos absurdos (ex.: >1km em 1s)
+        const d = calcularDistancia(ultimaLocalizacao.lat, ultimaLocalizacao.lon, lat, lon);
         if (d >= 0 && d < 1) {
             faseDistanciaAcumulada += d;
         }
@@ -759,7 +806,7 @@ function atualizarLocalizacao(position) {
 }
 
 function calcularDistancia(lat1, lon1, lat2, lon2) {
-    const R = 6371; // km
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -776,7 +823,7 @@ function erroGPS(error) {
 }
 
 /* =========================
-   Barra de progresso (única por fase)
+   Barra de progresso
    ========================= */
 function atualizarBarraProgresso(pct, alvo, kind) {
     const barra = document.getElementById('barraProgresso');
@@ -784,20 +831,14 @@ function atualizarBarraProgresso(pct, alvo, kind) {
     const right = document.getElementById('progressoTextoRight');
     const indicador = document.getElementById('indicadorFase');
 
-    if (!barra) return;
-    barra.style.width = `${pct}%`;
+    if (barra) barra.style.width = pct + '%';
+    if (left) left.textContent = pct + '%';
+    if (right) right.textContent = alvo > 0 ? (tipoTreino === 'tempo' || tipoTreino === 'fixo' ? formatTempoSegundos(alvo) : alvo.toFixed(2) + ' km') : 'Meta';
 
     if (indicador) {
-        if (kind === 'caminhada') indicador.classList.add('caminhada');
-        else indicador.classList.remove('caminhada');
-    }
-
-    if (left) left.textContent = `${pct}%`;
-    if (right) {
-        if (tipoTreino === 'tempo') {
-            right.textContent = alvo ? formatTempoSegundos(alvo) : '--:--';
-        } else {
-            right.textContent = alvo ? `${alvo.toFixed(2)} km` : '— km';
+        indicador.classList.remove('caminhada');
+        if (kind === 'caminhada') {
+            indicador.classList.add('caminhada');
         }
     }
 }
@@ -845,7 +886,6 @@ function limparTreino() {
     liberarWakeLock();
     pararAudioSilencioso();
 
-    // limpar UI
     const repDisp = document.getElementById('repeticoesDisplay');
     if (repDisp) repDisp.textContent = '0 / 0';
     const infoVal = document.getElementById('infoValor');
@@ -865,9 +905,16 @@ function limparTreino() {
 function atualizarDisplay() {
     const repDisp = document.getElementById('repeticoesDisplay');
     if (repDisp) repDisp.textContent = `${repeticaoAtual} / ${repeticaoTotal}`;
-    const faseTxt = (!fasesDaRepeticao.length || !fasesDaRepeticao[indiceFase]) ? 'Preparar' :
-        (fasesDaRepeticao[indiceFase].kind === 'caminhada' ? 'Caminhada' :
-            (fasesDaRepeticao[indiceFase].kind === 'corrida1' ? 'Corrida' : 'Corrida 2'));
+    
+    let faseTxt = 'Preparar';
+    if (fasesDaRepeticao.length > 0 && fasesDaRepeticao[indiceFase]) {
+        const f = fasesDaRepeticao[indiceFase];
+        if (f.kind === 'caminhada') faseTxt = 'Caminhada';
+        else if (f.kind === 'corrida1') faseTxt = 'Corrida';
+        else if (f.kind === 'corrida2') faseTxt = 'Corrida 2';
+        else faseTxt = 'Corrida'; // fallback para corrida_zona ou outros
+    }
+    
     const faseAt = document.getElementById('faseAtual');
     if (faseAt) faseAt.textContent = faseTxt;
 }
@@ -879,6 +926,20 @@ function formatTempoSegundos(sec) {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function formatTempoParaVoz(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    let texto = "";
+    if (m > 0) texto += `${m} minuto${m > 1 ? 's' : ''}`;
+    if (s > 0) texto += `${m > 0 ? ' e ' : ''}${s} segundo${s > 1 ? 's' : ''}`;
+    return texto || "0 segundos";
+}
+
+function numeroParaOrdinalExtenso(num) {
+    const ordinais = ['', 'primeira', 'segunda', 'terceira', 'quarta', 'quinta', 'sexta', 'sétima', 'oitava', 'nona', 'décima'];
+    return ordinais[num] || num + 'ª';
 }
 
 function showScreen(id) {
@@ -898,24 +959,80 @@ async function solicitarPermissaoNotificacoes() {
     }
     return Notification.permission === 'granted';
 }
+
 function enviarNotificacao(titulo, mensagem) {
     if (!('Notification' in window)) return;
     if (Notification.permission === 'granted') {
-        new Notification(titulo, { body: mensagem, icon: 'icon-192.png', tag: 'running-trainer' });
+        new Notification(titulo, { body: mensagem, icon: 'icon.png', tag: 'running-trainer' });
     }
+}
+
+/* =========================
+   ANÁLISES - Frequência Cardíaca e Cadência
+   ========================= */
+function abrirAnaliseFC() {
+    const zonas = calcularZonasFC(perfil.idade);
+    let html = `<h3>❤️ Frequência Cardíaca - Idade ${perfil.idade}</h3>`;
+    html += `<p><strong>FC Máxima Estimada:</strong> ${zonas.Z1.min_bpm + Math.round((zonas.Z5.max_bpm - zonas.Z1.min_bpm) / 4)} bpm</p>`;
+    html += `<div style="text-align: left; margin: 15px 0;">`;
+    
+    Object.keys(zonas).forEach(zona => {
+        const info = zonas[zona];
+        html += `<div style="background: ${info.cor}20; border-left: 4px solid ${info.cor}; padding: 10px; margin: 8px 0; border-radius: 5px;">`;
+        html += `<strong>${zona} - ${info.nome}:</strong> ${info.min_bpm} - ${info.max_bpm} bpm<br>`;
+        html += `<small>${info.descricao}</small>`;
+        html += `</div>`;
+    });
+    
+    html += `</div>`;
+    html += `<p style="font-size: 12px; color: #999;">Fórmula: FC máx = 220 - idade</p>`;
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.style.cssText = 'position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 3000;';
+    modal.innerHTML = `<div style="background: #1a1a2e; padding: 20px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; color: #eee;">${html}<button onclick="this.parentElement.parentElement.remove()" style="width: 100%; padding: 10px; margin-top: 15px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer;">Fechar</button></div>`;
+    document.body.appendChild(modal);
+}
+
+function abrirAnaliseCadencia() {
+    const cadencia = obterCadenciaIdeal(perfil.nivel, 'Z2');
+    let html = `<h3>🏃 Análise de Cadência</h3>`;
+    html += `<p><strong>Nível:</strong> ${perfil.nivel}</p>`;
+    html += `<p><strong>Altura:</strong> ${perfil.altura}m</p>`;
+    html += `<div style="text-align: left; margin: 15px 0;">`;
+    
+    const niveis = ['Iniciante', 'Intermediário', 'Avançado'];
+    niveis.forEach(nivel => {
+        const cad = CADENCIA_IDEAL[nivel];
+        html += `<div style="background: rgba(255,255,255,0.05); padding: 10px; margin: 8px 0; border-radius: 5px;">`;
+        html += `<strong>${nivel}:</strong><br>`;
+        Object.keys(cad).forEach(zona => {
+            const info = cad[zona];
+            html += `${zona}: ${info.min} - ${info.max} ppm (ideal: ${info.ppm})<br>`;
+        });
+        html += `</div>`;
+    });
+    
+    html += `</div>`;
+    html += `<p style="font-size: 12px; color: #999;">Cadência = passos por minuto. Mantenha um ritmo constante!</p>`;
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.style.cssText = 'position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 3000;';
+    modal.innerHTML = `<div style="background: #1a1a2e; padding: 20px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; color: #eee;">${html}<button onclick="this.parentElement.parentElement.remove()" style="width: 100%; padding: 10px; margin-top: 15px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer;">Fechar</button></div>`;
+    document.body.appendChild(modal);
 }
 
 /* =========================
    Inicialização da app
    ========================= */
 window.addEventListener('load', async () => {
-    console.log('Running Trainer iniciado (corrigido).');
+    console.log('Running Trainer iniciado (versão profissional).');
 
-    // carregar preferência de voz e tentar inicializar vozes (iOS-friendly)
+    carregarPerfil();
     carregarPreferenciaVoz();
     garantirAudioContext();
 
-    // inicializar vozes iOS (desbloquear) e carregar vozes
     if (typeof speechSynthesis !== 'undefined') {
         try {
             await inicializarVozesIOS();
@@ -924,13 +1041,9 @@ window.addEventListener('load', async () => {
         }
     }
 
-    // carregar vozes (fallback)
     setTimeout(carregarVozes, 800);
-
-    // criar audioCtx preventivamente
     garantirAudioContext();
 
-    // mostrar modal de permissões se necessário
     setTimeout(() => {
         if (!permissoesOk) {
             const modal = document.getElementById('permissionModal');
@@ -938,19 +1051,17 @@ window.addEventListener('load', async () => {
         }
     }, 900);
 
-    // registrar service worker se houver
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js')
             .then(() => console.log('✓ Service Worker registrado'))
             .catch(err => console.log('✗ Erro ao registrar SW:', err));
     }
 
-    // prevenir pinch-zoom (iOS)
     document.addEventListener('gesturestart', e => e.preventDefault());
 });
 
 /* =========================
-   Expor funções globais esperadas pelo HTML
+   Expor funções globais
    ========================= */
 window.showScreen = showScreen;
 window.atualizarVoz = atualizarVoz;
@@ -959,8 +1070,14 @@ window.testarVozManual = testarVozManual;
 window.testarVozSelecionada = testarVozSelecionada;
 window.iniciarTreinoTempo = iniciarTreinoTempo;
 window.iniciarTreinoDistancia = iniciarTreinoDistancia;
+window.iniciarTreinoFixo = iniciarTreinoFixo;
 window.pausarTreino = pausarTreino;
 window.finalizarTreino = finalizarTreino;
+window.abrirAnaliseFC = abrirAnaliseFC;
+window.abrirAnaliseCadencia = abrirAnaliseCadencia;
+window.atualizarPerfil = atualizarPerfil;
+window.carregarPerfil = carregarPerfil;
+
 window.requestPermissions = () => {
     garantirAudioContext();
     carregarVozes();
@@ -974,7 +1091,6 @@ window.requestPermissions = () => {
     if ('vibrate' in navigator) navigator.vibrate(200);
 };
 
-/* Função para ativar voz via interação (iOS) */
 function ativarVozComInteracao() {
     garantirAudioContext();
     try {
@@ -984,4 +1100,3 @@ function ativarVozComInteracao() {
         speechSynthesis.speak(u);
     } catch (e) { console.warn('ativarVozComInteracao falhou', e); }
 }
-

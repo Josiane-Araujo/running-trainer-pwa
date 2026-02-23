@@ -10,48 +10,13 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon.png">
     <link rel="stylesheet" href="styles.css">
-    <style>
-        /* Pequeno estilo embutido para a barra de progresso e modal */
-        .treino-container { display:flex; flex-direction:column; gap:16px; align-items:center; padding: 20px; }
-        .fase-atual { font-size:22px; font-weight:700; text-align:center; white-space:pre-line; }
-        .info-principal { display:flex; gap:12px; width:100%; justify-content:center; }
-        .info-box { background: rgba(255,255,255,0.03); padding:10px 14px; border-radius:10px; text-align:center; min-width:130px; }
-        .info-label { font-size:12px; color:#ccc; }
-        .info-valor { font-size:20px; font-weight:700; }
-        .info-valor-small { font-size:16px; }
-        .indicador-fase { width: 80%; height: 12px; border-radius: 8px; background: rgba(255,255,255,0.06); overflow:hidden; margin-top: 6px; }
-        .indicador-fase .bar { height:100%; width:0%; background: linear-gradient(90deg,#00cc66,#009944); transition: width 400ms linear; }
-        .indicador-fase.caminhada .bar { background: linear-gradient(90deg,#ffd166,#ff9f1c); }
-        .controles { display:flex; gap:10px; }
-        .btn { padding:10px 14px; border-radius:8px; cursor:pointer; border:none; }
-        .btn-primary { background:#667eea; color:white; }
-        .btn-secondary { background:#444; color:white; }
-        .btn-success { background:#00aa44; color:white; }
-        .btn-warning { background:#ffcc00; color:#111; }
-        .btn-danger { background:#e63946; color:white; }
-        .modal { position:fixed; left:0; right:0; top:0; bottom:0; display:none; align-items:center; justify-content:center; background: rgba(0,0,0,0.6); z-index:2000; }
-        .modal.active { display:flex; }
-        .modal-content { background:white; padding:20px; width:90%; max-width:420px; border-radius:12px; color:#111; }
-        .form-group { margin-bottom:12px; }
-        input[type=number], select { width:100%; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:14px; }
-        label { display:block; margin-bottom:6px; color:#eee; }
-        body { background: #07071a; color: #eaeef6; font-family: Arial, Helvetica, sans-serif; margin:0; padding:0; }
-        .container { padding:20px; max-width:520px; margin:0 auto; }
-        .screen { display:none; min-height:100vh; padding-top:24px; }
-        .screen.active { display:block; }
-        .title { text-align:center; margin-bottom:4px; }
-        .subtitle { text-align:center; margin-bottom:18px; color:#cbd5e1; }
-        .button-group { display:flex; gap:8px; flex-direction:column; }
-        .info-text { color:#bcd; font-size:13px; }
-        .warning-text { color:#b33; }
-    </style>
 </head>
 <body>
-    <!-- Tela Menu -->
+    <!-- Tela Menu Principal -->
     <div id="menuScreen" class="screen active">
         <div class="container">
             <h1 class="title">Running Trainer</h1>
-            <p class="subtitle">Escolha o tipo de treino</p>
+            <p class="subtitle">Treinos Profissionais de Corrida</p>
             
             <!-- Seletor de Voz no Menu -->
             <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 15px; margin-bottom: 20px;">
@@ -70,47 +35,149 @@
             </div>
             
             <div class="button-group">
+                <button class="btn btn-primary" onclick="showScreen('perfilScreen')">
+                    ⚙️ Configurar Perfil
+                </button>
+                <button class="btn btn-secondary" onclick="showScreen('treinosFixosScreen')">
+                    📋 Treinos Fixos
+                </button>
                 <button class="btn btn-primary" onclick="showScreen('tempoScreen')">
-                    Treino por TEMPO
+                    ⏱️ Treino por TEMPO
                 </button>
                 <button class="btn btn-secondary" onclick="showScreen('distanciaScreen')">
-                    Treino por DISTÂNCIA
+                    📍 Treino por DISTÂNCIA
                 </button>
+                <button class="btn" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);" onclick="abrirAnaliseFC()">
+                    ❤️ Frequência Cardíaca
+                </button>
+                <button class="btn" style="background: linear-gradient(135deg, #ffa500 0%, #ff8c00 100%);" onclick="abrirAnaliseCadencia()">
+                    🏃 Análise de Cadência
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela Configurar Perfil -->
+    <div id="perfilScreen" class="screen">
+        <div class="container">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <button class="btn btn-secondary" onclick="showScreen('menuScreen')">← Voltar</button>
+                <h2 style="margin:0; flex:1;">Seu Perfil</h2>
+            </div>
+
+            <div class="form" style="margin-top: 20px;">
+                <div class="form-group">
+                    <label>👤 Nome</label>
+                    <input type="text" id="inputNome" placeholder="Seu nome" value="">
+                </div>
+
+                <div class="form-group">
+                    <label>🎂 Idade (anos)</label>
+                    <input type="number" id="inputIdade" placeholder="Ex: 30" min="15" max="100" value="">
+                </div>
+
+                <div class="form-group">
+                    <label>📏 Altura (metros)</label>
+                    <input type="number" id="inputAltura" placeholder="Ex: 1.75" step="0.01" min="1.40" max="2.30" value="">
+                </div>
+
+                <div class="form-group">
+                    <label>🏃 Nível de Experiência</label>
+                    <select id="selectNivel" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:14px; background: white; color: #333;">
+                        <option value="Iniciante">Iniciante</option>
+                        <option value="Intermediário">Intermediário</option>
+                        <option value="Avançado">Avançado</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-success" onclick="salvarPerfilUI()">
+                    ✅ Salvar Perfil
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela Treinos Fixos -->
+    <div id="treinosFixosScreen" class="screen">
+        <div class="container">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <button class="btn btn-secondary" onclick="showScreen('menuScreen')">← Voltar</button>
+                <h2 style="margin:0; flex:1;">Treinos Fixos</h2>
+            </div>
+
+            <div class="button-group" style="margin-top: 20px;">
+                <button class="btn btn-primary" onclick="selecionarTreino('5k_iniciante')">
+                    🏃 5K Iniciante (8 semanas)
+                </button>
+                <button class="btn btn-primary" onclick="selecionarTreino('5k_sub30')">
+                    ⚡ 5K Sub 30 (6 semanas)
+                </button>
+                <button class="btn btn-primary" onclick="selecionarTreino('10k')">
+                    🏆 10K (8 semanas)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela Seleção de Semana/Dia -->
+    <div id="semanadiaScreen" class="screen">
+        <div class="container">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <button class="btn btn-secondary" onclick="showScreen('treinosFixosScreen')">← Voltar</button>
+                <h2 style="margin:0; flex:1;" id="tituloTreinoSelecionado">Selecione a Semana</h2>
+            </div>
+
+            <div id="containerSemanas" class="button-group" style="margin-top: 20px;">
+                <!-- Preenchido dinamicamente -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela Seleção de Dia (A/B/C) -->
+    <div id="diaScreen" class="screen">
+        <div class="container">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <button class="btn btn-secondary" onclick="showScreen('semanadiaScreen')">← Voltar</button>
+                <h2 style="margin:0; flex:1;" id="tituloDiaScreen">Selecione o Dia</h2>
+            </div>
+
+            <div id="containerDias" class="button-group" style="margin-top: 20px;">
+                <!-- Preenchido dinamicamente -->
             </div>
         </div>
     </div>
 
     <!-- Tela Treino por Tempo -->
     <div id="tempoScreen" class="screen">
-           <div class="container">
+        <div class="container">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
                 <button class="btn btn-secondary" onclick="showScreen('menuScreen')">← Voltar</button>
                 <h2 style="margin:0; flex:1;">Treino por Tempo</h2>
             </div>
 
-            <div class="form">
+            <div class="form" style="margin-top: 20px;">
                 <div class="form-group">
-                    <label>1º Tempo de CORRIDA (minutos) ⭐ (obrigatório)</label>
+                    <label>1º Tempo de CORRIDA (minutos) ⭐</label>
                     <input type="number" id="tempoCorrida1" placeholder="Ex: 20" min="1" max="999">
                 </div>
 
                 <div class="form-group">
                     <label>Tempo de CAMINHADA (minutos) (opcional)</label>
-                    <input type="number" id="tempoCaminhada" placeholder="Ex: 2 (opcional)" min="0" max="999">
+                    <input type="number" id="tempoCaminhada" placeholder="Ex: 2" min="0" max="999">
                 </div>
 
                 <div class="form-group">
                     <label>2º Tempo de CORRIDA (minutos) (opcional)</label>
-                    <input type="number" id="tempoCorrida2" placeholder="Ex: 10 (opcional)" min="0" max="999">
+                    <input type="number" id="tempoCorrida2" placeholder="Ex: 10" min="0" max="999">
                 </div>
 
                 <div class="form-group">
-                    <label>Número de REPETIÇÕES ⭐ (obrigatório) (1–99)</label>
+                    <label>Número de REPETIÇÕES ⭐ (1–99)</label>
                     <input type="number" id="repeticoes" placeholder="Ex: 8" min="1" max="99">
                 </div>
 
                 <button class="btn btn-success" onclick="iniciarTreinoTempo()">
-                    INICIAR TREINO
+                    ▶️ INICIAR TREINO
                 </button>
             </div>
         </div>
@@ -118,80 +185,80 @@
 
     <!-- Tela Treino por Distância -->
     <div id="distanciaScreen" class="screen">
-         <div class="container">
+        <div class="container">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
                 <button class="btn btn-secondary" onclick="showScreen('menuScreen')">← Voltar</button>
                 <h2 style="margin:0; flex:1;">Treino por Distância</h2>
             </div>
 
-            <div class="form">
+            <div class="form" style="margin-top: 20px;">
                 <div class="form-group">
-                    <label>1ª Distância de CORRIDA (km) ⭐ (obrigatório)</label>
-                    <input type="number" id="distCorrida1" placeholder="Ex: 0.2 (200m) ou 2" step="0.01" min="0.01" max="999">
+                    <label>1ª Distância de CORRIDA (km) ⭐</label>
+                    <input type="number" id="distCorrida1" placeholder="Ex: 0.2 ou 2" step="0.01" min="0.01" max="999">
                 </div>
 
                 <div class="form-group">
                     <label>Distância de CAMINHADA (km) (opcional)</label>
-                    <input type="number" id="distCaminhada" placeholder="Ex: 0.1 (opcional)" step="0.01" min="0" max="999">
+                    <input type="number" id="distCaminhada" placeholder="Ex: 0.1" step="0.01" min="0" max="999">
                 </div>
 
                 <div class="form-group">
                     <label>2ª Distância de CORRIDA (km) (opcional)</label>
-                    <input type="number" id="distCorrida2" placeholder="Ex: 0.1 (opcional)" step="0.01" min="0" max="999">
+                    <input type="number" id="distCorrida2" placeholder="Ex: 0.1" step="0.01" min="0" max="999">
                 </div>
 
                 <div class="form-group">
-                    <label>Número de REPETIÇÕES ⭐ (obrigatório) (1–99)</label>
+                    <label>Número de REPETIÇÕES ⭐ (1–99)</label>
                     <input type="number" id="repeticoesDist" placeholder="Ex: 8" min="1" max="99">
                 </div>
 
                 <p class="info-text">📍 GPS será ativado durante o treino</p>
 
                 <button class="btn btn-success" onclick="iniciarTreinoDistancia()">
-                    INICIAR TREINO
+                    ▶️ INICIAR TREINO
                 </button>
             </div>
         </div>
     </div>
 
     <!-- Tela de Treino -->
-<div id="treinoScreen" class="screen">
-    <div class="container treino-container">
-        <div class="fase-atual" id="faseAtual">Preparar</div>
+    <div id="treinoScreen" class="screen">
+        <div class="container treino-container">
+            <div class="fase-atual" id="faseAtual">Preparar</div>
 
-        <div class="info-principal">
-            <div class="info-box">
-                <div class="info-label" id="infoLabel">Tempo Restante</div>
-                <div class="info-valor" id="infoValor">00:00</div>
+            <div class="info-principal">
+                <div class="info-box">
+                    <div class="info-label" id="infoLabel">Tempo Restante</div>
+                    <div class="info-valor" id="infoValor">00:00</div>
+                </div>
+
+                <div class="info-box">
+                    <div class="info-label">Repetições</div>
+                    <div class="info-valor-small" id="repeticoesDisplay">0 / 0</div>
+                </div>
             </div>
 
-            <div class="info-box">
-                <div class="info-label">Repetições</div>
-                <div class="info-valor-small" id="repeticoesDisplay">0 / 0</div>
+            <div class="indicador-fase" id="indicadorFase">
+                <div class="bar" id="barraProgresso" style="width:0%"></div>
             </div>
-        </div>
 
-        <div class="indicador-fase" id="indicadorFase">
-            <div class="bar" id="barraProgresso" style="width:0%"></div>
-        </div>
+            <div style="width:80%; display:flex; justify-content:space-between; font-size:12px; color:#bcd;">
+                <div id="progressoTextoLeft">0%</div>
+                <div id="progressoTextoRight">Meta</div>
+            </div>
 
-        <div style="width:80%; display:flex; justify-content:space-between; font-size:12px; color:#bcd;">
-            <div id="progressoTextoLeft">0%</div>
-            <div id="progressoTextoRight">Meta</div>
-        </div>
+            <div class="controles">
+                <button class="btn btn-warning" id="btnPausar" onclick="pausarTreino()">
+                    PAUSAR
+                </button>
+                <button class="btn btn-danger" onclick="finalizarTreino()">
+                    FINALIZAR
+                </button>
+            </div>
 
-        <div class="controles">
-            <button class="btn btn-warning" id="btnPausar" onclick="pausarTreino()">
-                PAUSAR
-            </button>
-            <button class="btn btn-danger" onclick="finalizarTreino()">
-                FINALIZAR
-            </button>
+            <div class="info-extra" id="infoExtra"></div>
         </div>
-
-        <div class="info-extra" id="infoExtra"></div>
     </div>
-</div>
 
     <!-- Modal de Permissões -->
     <div id="permissionModal" class="modal">
@@ -219,10 +286,10 @@
                 <li>🔊 <strong>Áudio</strong> - Sons de alerta (beeps)</li>
                 <li>📳 <strong>Vibração</strong> - Alertas táteis</li>
                 <li>🔔 <strong>Notificações</strong> - Alertas na tela bloqueada</li>
-                <li>🔒 <strong>Tela Ligada</strong> - Mantém app ativo</li>
+                <li>🔒 <strong>Tela Ligada</strong> - Mantém app ativo (Wake Lock)</li>
                 <li>📍 <strong>Localização</strong> - Para treino por distância</li>
             </ul>
-            <p class="warning-text">⚠️ <strong>IMPORTANTE:</strong> Durante o treino, mantenha o app aberto (pode bloquear a tela). Não feche o app nem abra outros aplicativos. Você ouvirá avisos como "Iniciando primeira repetição" e "CORRIDA!".</p>
+            <p class="warning-text">⚠️ <strong>IMPORTANTE:</strong> Durante o treino, mantenha o app aberto (pode bloquear a tela). Você ouvirá avisos como "CORRIDA!" e "Caminhada!".</p>
             <button class="btn btn-primary" onclick="requestPermissions()">
                 🎤 ATIVAR VOZ E PERMITIR
             </button>
@@ -233,6 +300,78 @@
         </div>
     </div>
 
+    <script src="treinos_fixos.js"></script>
     <script src="app.js"></script>
+    <script>
+        // Script para gerenciar seleção de treinos fixos
+        let treinoFixoSelecionado = null;
+        let semanaSelecionada = null;
+
+        function selecionarTreino(treinoId) {
+            treinoFixoSelecionado = treinoId;
+            const treino = TREINOS_FIXOS[treinoId];
+            
+            const container = document.getElementById('containerSemanas');
+            container.innerHTML = '';
+            
+            Object.keys(treino.semanas).forEach(semana => {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-primary';
+                btn.textContent = `Semana ${semana}`;
+                btn.onclick = () => selecionarSemana(semana);
+                container.appendChild(btn);
+            });
+
+            document.getElementById('tituloTreinoSelecionado').textContent = treino.nome;
+            showScreen('semanadiaScreen');
+        }
+
+        function selecionarSemana(semana) {
+            semanaSelecionada = semana;
+            const treino = TREINOS_FIXOS[treinoFixoSelecionado];
+            const semanal = treino.semanas[semana];
+            
+            const container = document.getElementById('containerDias');
+            container.innerHTML = '';
+            
+            Object.keys(semanal).forEach(dia => {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-secondary';
+                btn.textContent = `Dia ${dia}`;
+                btn.onclick = () => iniciarTreinoFixo(treinoFixoSelecionado, semana, dia);
+                container.appendChild(btn);
+            });
+
+            document.getElementById('tituloDiaScreen').textContent = `${treino.nome} - Semana ${semana}`;
+            showScreen('diaScreen');
+        }
+
+        function salvarPerfilUI() {
+            const nome = document.getElementById('inputNome').value.trim();
+            const idade = document.getElementById('inputIdade').value;
+            const altura = document.getElementById('inputAltura').value;
+            const nivel = document.getElementById('selectNivel').value;
+
+            if (!nome || !idade || !altura) {
+                alert('⚠️ Preencha todos os campos!');
+                return;
+            }
+
+            atualizarPerfil(nome, idade, altura, nivel);
+            alert('✅ Perfil salvo com sucesso!');
+            showScreen('menuScreen');
+        }
+
+        // Carregar dados do perfil ao abrir tela
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                carregarPerfil();
+                document.getElementById('inputNome').value = perfil.nome;
+                document.getElementById('inputIdade').value = perfil.idade;
+                document.getElementById('inputAltura').value = perfil.altura;
+                document.getElementById('selectNivel').value = perfil.nivel;
+            }, 500);
+        });
+    </script>
 </body>
 </html>
